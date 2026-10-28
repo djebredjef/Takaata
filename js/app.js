@@ -8,7 +8,7 @@
   const PROGRESS = { open: null, assigned: 0, pickup: 0, loading: 0.04, transit: 0.55, arrived: 1, delivered: 1, cancelled: null };
   const ACTIVE = ['open', 'assigned', 'pickup', 'loading', 'transit', 'arrived'];
 
-  const view = { name: 'home', step: 1, draft: null, orderId: null, confirmCancel: false, reportOpen: false, reported: false, counterFor: null, confirmReset: false, offerMsg: {} };
+  const view = { name: 'home', step: 1, draft: null, auth: { mode: 'signup', step: 'form' }, meSub: '', rate: null, confirmLogout: false, supportSent: false, orderId: null, confirmCancel: false, reportOpen: false, reported: false, counterFor: null, confirmReset: false, offerMsg: {} };
   const root = document.getElementById('app');
 
   // ---------- helpers ----------
@@ -84,6 +84,11 @@
     const locLabel = { busy: 'loc.busy', ok: 'loc.ok', off: 'loc.off', out: 'loc.out', manual: 'quote.from' }[d.loc] || 'loc.busy';
     return `
       ${active.length ? `<section class="home-active"><h2 class="app-h">${esc(t('c.active'))}</h2><div class="stack">${active.map(orderRow).join('')}</div></section>` : ''}
+      ${(() => {
+        const toRate = store.state.orders.find(o => o.owner === 'me' && o.status === 'delivered' && o.rating == null && o.driver);
+        return toRate ? `<button type="button" class="rate-banner" data-act="open-order" data-id="${toRate.id}">
+          <span class="stars" aria-hidden="true">★★★★★</span><span>${esc(t('rt.pending', { n: toRate.driver.me ? t('o.you') : toRate.driver.name }))}</span><b>${esc(t('rt.rate'))} ›</b></button>` : '';
+      })()}
       <div class="home">
         <div class="need-row" role="radiogroup" aria-label="${esc(t('c.hello'))}">
           ${NEEDS.map(n => `<label class="need-chip"><input type="radio" name="need" id="h-need-${n}" value="${n}" data-bind="need"${d.need === n ? ' checked' : ''}><span><i class="need-ic need-${n}" aria-hidden="true"></i>${esc(t('need.' + n))}</span></label>`).join('')}
@@ -135,11 +140,13 @@
 
   // Barre du bas (client) : Commander / Mes courses.
   function bottomNav() {
-    const item = (act, key, path) => `<button type="button" class="bn-item${view.name === act ? ' is-on' : ''}" data-act="${act}"${view.name === act ? ' aria-current="page"' : ''}>
+    const section = { home: 'home', wizard: 'home', orders: 'orders', order: 'orders', me: 'me' }[view.name] || 'home';
+    const item = (act, key, path) => `<button type="button" class="bn-item${section === act ? ' is-on' : ''}" data-act="${act}"${section === act ? ' aria-current="page"' : ''}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><span>${esc(t(key))}</span></button>`;
     return `<nav class="bottom-nav" aria-label="${esc(t('role.client'))}">
       ${item('home', 'bn.order', 'M3 11 12 4l9 7v9h-6v-6H9v6H3z')}
       ${item('orders', 'c.history', 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4')}
+      ${item('me', 'bn.me', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0')}
     </nav>`;
   }
 
@@ -370,21 +377,21 @@
           <div><dt>${esc(t('w.payment'))}</dt><dd>${esc(t('pay.' + o.payment))}</dd></div>
         </dl>
 
-        ${o.status !== 'delivered' ? `
-        <div class="photo-row">
-          ${photoInput(o, 'start', t('t.photosStart'))}
-          ${['transit', 'arrived'].includes(o.status) ? photoInput(o, 'end', t('t.photosEnd')) : ''}
-        </div>` : ''}
+        ${o.photos.start || o.photos.end ? `<p class="hint">${esc(t('dl.proofs', { a: o.photos.start, b: o.photos.end }))}</p>` : ''}
 
         ${o.status === 'arrived' ? `
           <div class="confirm-box">
-            <p>${esc(t('t.confirmHint'))}</p>
-            <button class="btn btn-signal btn-block" type="button" data-act="confirm" data-id="${o.id}">${esc(t('t.confirm'))}</button>
+            <p><b>${esc(t('dl.arrived'))}</b>${o.photos.end ? ' ' + esc(t('dl.proof', { n: o.photos.end })) : ''}</p>
+            ${o.disputed ? `<p class="notice">${esc(t('dl.disputed'))}</p>`
+              : `<p class="hint">${esc(t('dl.optional', { t: mmss((o.autoConfirmAt || Date.now()) - Date.now()) }))}</p>`}
+            <button class="btn btn-signal btn-block" type="button" data-act="confirm" data-id="${o.id}">${esc(t('dl.ok'))}</button>
           </div>` : ''}
 
         ${o.sim && store.NEXT[o.status] ? `<button class="link-btn demo-btn" type="button" data-act="demo-next" data-id="${o.id}">${esc(t('t.demoNext'))} →</button>` : ''}
 
-        ${o.status === 'delivered' ? receipt(o) : ''}
+        ${o.status === 'delivered' && o.closedBy === 'auto' ? `<p class="notice">${esc(t('dl.auto'))}</p>` : ''}
+        ${o.status === 'delivered' && o.closedBy === 'support' ? `<p class="notice">${esc(t('dl.support'))}</p>` : ''}
+        ${o.status === 'delivered' ? rateBlock(o) + receipt(o) : ''}
         ${reportBlock(o)}
         ${['assigned', 'pickup'].includes(o.status) ? cancelBlock(o) : ''}`;
     }
@@ -433,7 +440,6 @@
   }
 
   function receipt(o) {
-    const rated = o.rating != null;
     return `
       <div class="waybill waybill-app receipt">
         <div class="waybill-head"><span>${esc(t('r.receipt'))}</span><span class="mono">${esc(o.id)}</span></div>
@@ -445,15 +451,6 @@
           <div><dt>${esc(t('status.delivered'))}</dt><dd class="mono">${date(o.timeline.delivered)} ${time(o.timeline.delivered)}</dd></div>
         </dl>
       </div>
-      ${rated ? `<p class="notice">${esc(t('r.thanks'))} <span class="stars">${stars(o.rating)}</span></p>` : `
-      <form class="rate" id="rateForm" data-id="${o.id}">
-        <p class="app-h">${esc(t('r.title'))}</p>
-        <div class="rate-stars" role="radiogroup">
-          ${[1, 2, 3, 4, 5].map(n => `<label><input type="radio" name="stars" id="rate-${n}" value="${n}"${n === 5 ? ' checked' : ''}><span aria-label="${n}">★</span></label>`).join('')}
-        </div>
-        <label class="field"><span class="sr-only">${esc(t('r.commentPh'))}</span><input id="rateComment" placeholder="${esc(t('r.commentPh'))}"></label>
-        <button class="btn btn-signal btn-sm" type="submit">${esc(t('r.send'))}</button>
-      </form>`}
       <button class="btn btn-ghost btn-block" type="button" data-act="again" data-id="${o.id}">${esc(t('r.again'))}</button>`;
   }
 
@@ -557,8 +554,14 @@
         <p class="notice">${esc(o.payment === 'cash'
           ? t('d.cashHint', { p: fcfa(o.price), c: fcfa(o.commission) })
           : t('d.mmHint', { m: t('pay.' + o.payment), n: fcfa(o.price - o.commission) }))}</p>
+        ${['loading', 'transit', 'arrived'].includes(o.status) ? `
+        <div class="photo-row">
+          ${photoInput(o, 'start', t('t.photosStart'))}
+          ${['transit', 'arrived'].includes(o.status) ? photoInput(o, 'end', t('t.photosEnd')) : ''}
+        </div>
+        <p class="hint">${esc(t('d.proofHint'))}</p>` : ''}
         ${nextKey ? `<button class="btn btn-signal btn-block" type="button" data-act="d-next" data-id="${o.id}">${esc(t(nextKey))}</button>` : ''}
-        ${o.status === 'arrived' ? `<p class="hint">${esc(t('d.waitClient'))}</p>
+        ${o.status === 'arrived' ? `<p class="hint">${esc(t('d.waitClient'))}${o.autoConfirmAt ? ' ' + esc(t('d.autoIn', { t: mmss(o.autoConfirmAt - Date.now()) })) : ''}</p>
           ${o.owner === 'me' ? `<button class="link-btn demo-btn" type="button" data-act="confirm" data-id="${o.id}">${esc(t('d.clientConfirm'))}</button>` : ''}` : ''}
       </article>`;
   }
@@ -602,7 +605,11 @@
       </section>
       <section class="app-sec">
         <h2 class="app-h">${esc(t('a.reports'))}</h2>
-        ${s.reports.length ? `<ol class="ledger-list">${s.reports.map(r => `<li><span><b class="mono">${esc(r.orderId)}</b><small>${esc(r.text)}</small></span><span class="mono">${date(r.at)}</span></li>`).join('')}</ol>` : `<p class="empty">${esc(t('a.noReports'))}</p>`}
+        ${s.reports.length ? `<ol class="ledger-list">${s.reports.map(r => {
+          const o = r.orderId && store.getOrder(r.orderId);
+          return `<li><span><b class="mono">${esc(r.orderId || '—')}</b><small>${esc(r.text)}</small>
+            ${o && o.status === 'arrived' ? `<button class="btn btn-ghost btn-sm" type="button" data-act="support-close" data-id="${o.id}">${esc(t('a.supportClose'))}</button>` : ''}</span><span class="mono">${date(r.at)}</span></li>`;
+        }).join('')}</ol>` : `<p class="empty">${esc(t('a.noReports'))}</p>`}
       </section>
       <section class="app-sec">
         ${view.confirmReset ? `<div class="confirm-inline"><p>${esc(t('a.resetConfirm'))}</p><div class="btn-row">
@@ -610,6 +617,402 @@
           <button class="btn btn-ghost btn-sm" type="button" data-act="reset-no">${esc(t('a.resetNo'))}</button></div></div>`
           : `<button class="link-btn danger" type="button" data-act="reset-ask">${esc(t('a.reset'))}</button>`}
       </section>`;
+  }
+
+  // ---------- COMPTE CLIENT : inscription, connexion, « Moi » ----------
+  TK.addStrings({
+    fr: {
+      'bn.me': 'Moi',
+      'au.signupT': 'Créer mon compte', 'au.signupS': 'Votre numéro suffit pour commander. Vous recevrez un code par SMS.',
+      'au.loginT': 'Se connecter', 'au.loginS': 'Entrez le numéro de votre compte Takaata.',
+      'au.first': 'Prénom', 'au.last': 'Nom', 'au.phone': 'Numéro de téléphone',
+      'au.getCode': 'Recevoir mon code', 'au.continue': 'Continuer', 'au.haveAccount': "J'ai déjà un compte · Se connecter",
+      'au.noAccount': 'Pas encore de compte ? Créer un compte', 'au.badPhone': 'Numéro ivoirien à 10 chiffres, par exemple 07 48 21 63 90.',
+      'au.badName': 'Indiquez votre prénom et votre nom.', 'au.exists': 'Un compte existe déjà avec ce numéro. Connectez-vous.',
+      'au.unknown': 'Aucun compte avec ce numéro. Créez un compte.',
+      'au.otpT': 'Code de vérification', 'au.otpS': 'Saisissez le code à 6 chiffres envoyé au {p}.',
+      'au.demoCode': 'Prototype : aucun SMS n’est envoyé. Votre code est {c}.', 'au.verify': 'Valider',
+      'au.resend': 'Renvoyer le code', 'au.resendIn': 'Renvoyer le code dans {s} s', 'au.editPhone': 'Modifier le numéro',
+      'au.badOtp': 'Code incorrect. Vérifiez les 6 chiffres.', 'au.expired': 'Code expiré. Demandez un nouveau code.',
+      'au.helloT': 'Bonjour {n}', 'au.chooseS': 'Comment voulez-vous vous connecter ?', 'au.bySms': 'Recevoir un code par SMS',
+      'au.byPass': 'Utiliser mon mot de passe', 'au.passT': 'Mot de passe', 'au.password': 'Mot de passe', 'au.signin': 'Se connecter',
+      'au.badPass': 'Mot de passe incorrect.', 'au.forgot': 'Mot de passe oublié ? Recevoir un code',
+      'au.setPassT': 'Choisir un mot de passe', 'au.setPassS': 'Facultatif : pour vous connecter sans attendre de SMS.',
+      'au.newPass': 'Nouveau mot de passe (6 caractères minimum)', 'au.save': 'Enregistrer', 'au.later': 'Plus tard',
+      'au.shortPass': 'Le mot de passe doit faire au moins 6 caractères.', 'au.welcome': 'Bienvenue {n}',
+      'me.newClient': 'Nouveau client', 'me.notes': '{n} notes de chauffeurs', 'me.note1': '1 note de chauffeur', 'me.trips': 'Courses', 'me.spent': 'Dépensé', 'me.coupons': 'Coupons',
+      'me.edit': 'Modifier', 'me.photo': 'Photo', 'me.back': 'Moi',
+      'me.m.coupons': 'Coupons', 'me.m.invoices': 'Factures et reçus', 'me.m.support': 'Service client', 'me.m.invite': 'Parrainer un proche',
+      'me.m.settings': 'Paramètres', 'me.m.profile': 'Mon profil', 'me.logout': 'Se déconnecter', 'me.logoutQ': 'Se déconnecter de Takaata sur cet appareil ?',
+      'me.couponName': 'Bienvenue', 'me.couponD': 'Sur votre première course terminée · offre du pilote, dans la limite des 200 premières courses',
+      'me.couponOk': 'Disponible', 'me.couponNote': 'Le coupon sera déduit automatiquement au paiement dès le lancement.',
+      'me.noInvoices': 'Vos reçus apparaîtront ici après votre première course livrée.',
+      'me.supportPhone': 'Numéro du service client', 'me.tbd': 'À définir au lancement', 'me.faq': 'Questions fréquentes',
+      'me.write': 'Écrire au support', 'me.writePh': 'Votre question ou votre problème', 'me.sent': 'Message envoyé. Réponse sous un jour ouvré.',
+      'me.myMsgs': 'Mes messages', 'me.inviteS': 'Partagez votre code : votre proche le saisit à l’inscription.',
+      'me.inviteNote': 'Le parrainage est récompensé seulement après une première course terminée. Le montant sera annoncé au lancement.',
+      'me.copy': 'Copier', 'me.copied': 'Code copié',
+      'me.lang': 'Langue', 'me.notif': 'Notifications de course (offres, arrivée du chauffeur)', 'me.pass': 'Mot de passe',
+      'me.passSet': 'Changer le mot de passe', 'me.passNone': 'Définir un mot de passe', 'me.passSaved': 'Mot de passe enregistré',
+      'me.phoneFixed': 'Pour changer de numéro, contactez le service client.', 'me.saved': 'Profil enregistré',
+      'dl.arrived': 'Le chauffeur est arrivé à destination.', 'dl.proof': 'Il a ajouté {n} photo(s) de livraison comme preuve.',
+      'dl.optional': 'Vérifiez vos biens. La confirmation est facultative : sans réponse, la course est clôturée automatiquement dans {t}.',
+      'dl.ok': 'Tout est en ordre', 'dl.disputed': 'Signalement reçu : la clôture automatique est suspendue. Le support vous contacte.',
+      'dl.auto': 'Course clôturée automatiquement, sans réponse de votre part, sur la preuve de livraison du chauffeur.',
+      'dl.support': 'Livraison validée par le support après examen.', 'dl.proofs': 'Preuves du chauffeur : {a} photo(s) au chargement, {b} à la livraison.',
+      'rt.q': 'Comment s’est passée la course avec {n} ?', 'rt.w1': 'Très mauvais', 'rt.w2': 'Mauvais', 'rt.w3': 'Moyen', 'rt.w4': 'Bien', 'rt.w5': 'Excellent',
+      'rt.why': 'Qu’avez-vous apprécié ?', 'rt.whyBad': 'Qu’est-ce qui n’allait pas ?', 'rt.send': 'Envoyer la note', 'rt.thanks': 'Merci, votre note aide les autres clients.',
+      'rt.pending': 'Notez votre course avec {n}', 'rt.rate': 'Noter',
+      'tag.punctual': 'Ponctuel', 'tag.careful': 'Soigneux avec mes biens', 'tag.friendly': 'Aimable', 'tag.driving': 'Conduite prudente', 'tag.helpful': 'A aidé au chargement',
+      'tag.late': 'En retard', 'tag.damage': 'Objets abîmés', 'tag.rude': 'Impoli', 'tag.unsafe': 'Conduite dangereuse', 'tag.price': 'A demandé plus que le prix convenu',
+      'd.proofHint': 'Photos = preuve en cas de litige, et clôture de la course si le client ne répond pas.',
+      'd.autoIn': 'Sans réponse du client, clôture automatique dans {t}.', 'a.supportClose': 'Valider la livraison (support)'
+    },
+    en: {
+      'bn.me': 'Me',
+      'au.signupT': 'Create my account', 'au.signupS': 'Your phone number is all you need. You will get a code by SMS.',
+      'au.loginT': 'Sign in', 'au.loginS': 'Enter the number of your Takaata account.',
+      'au.first': 'First name', 'au.last': 'Last name', 'au.phone': 'Phone number',
+      'au.getCode': 'Get my code', 'au.continue': 'Continue', 'au.haveAccount': 'I already have an account · Sign in',
+      'au.noAccount': 'No account yet? Create one', 'au.badPhone': 'Ivorian 10-digit number, for example 07 48 21 63 90.',
+      'au.badName': 'Enter your first and last name.', 'au.exists': 'An account already uses this number. Please sign in.',
+      'au.unknown': 'No account with this number. Create an account.',
+      'au.otpT': 'Verification code', 'au.otpS': 'Enter the 6-digit code sent to {p}.',
+      'au.demoCode': 'Prototype: no SMS is sent. Your code is {c}.', 'au.verify': 'Verify',
+      'au.resend': 'Resend the code', 'au.resendIn': 'Resend the code in {s} s', 'au.editPhone': 'Change number',
+      'au.badOtp': 'Wrong code. Check the 6 digits.', 'au.expired': 'Code expired. Request a new one.',
+      'au.helloT': 'Hello {n}', 'au.chooseS': 'How do you want to sign in?', 'au.bySms': 'Get a code by SMS',
+      'au.byPass': 'Use my password', 'au.passT': 'Password', 'au.password': 'Password', 'au.signin': 'Sign in',
+      'au.badPass': 'Wrong password.', 'au.forgot': 'Forgot your password? Get a code',
+      'au.setPassT': 'Choose a password', 'au.setPassS': 'Optional: sign in without waiting for an SMS.',
+      'au.newPass': 'New password (at least 6 characters)', 'au.save': 'Save', 'au.later': 'Later',
+      'au.shortPass': 'The password must be at least 6 characters.', 'au.welcome': 'Welcome {n}',
+      'me.newClient': 'New customer', 'me.notes': '{n} driver ratings', 'me.note1': '1 driver rating', 'me.trips': 'Trips', 'me.spent': 'Spent', 'me.coupons': 'Coupons',
+      'me.edit': 'Edit', 'me.photo': 'Photo', 'me.back': 'Me',
+      'me.m.coupons': 'Coupons', 'me.m.invoices': 'Invoices and receipts', 'me.m.support': 'Customer service', 'me.m.invite': 'Invite someone',
+      'me.m.settings': 'Settings', 'me.m.profile': 'My profile', 'me.logout': 'Sign out', 'me.logoutQ': 'Sign out of Takaata on this device?',
+      'me.couponName': 'Welcome', 'me.couponD': 'On your first completed trip · pilot offer, limited to the first 200 trips',
+      'me.couponOk': 'Available', 'me.couponNote': 'The coupon will be deducted automatically at payment from launch.',
+      'me.noInvoices': 'Your receipts will appear here after your first delivered trip.',
+      'me.supportPhone': 'Customer service number', 'me.tbd': 'To be set at launch', 'me.faq': 'Frequently asked questions',
+      'me.write': 'Write to support', 'me.writePh': 'Your question or problem', 'me.sent': 'Message sent. Reply within one business day.',
+      'me.myMsgs': 'My messages', 'me.inviteS': 'Share your code: they enter it when signing up.',
+      'me.inviteNote': 'Referrals are rewarded only after a first completed trip. The amount will be announced at launch.',
+      'me.copy': 'Copy', 'me.copied': 'Code copied',
+      'me.lang': 'Language', 'me.notif': 'Trip notifications (offers, driver arrival)', 'me.pass': 'Password',
+      'me.passSet': 'Change password', 'me.passNone': 'Set a password', 'me.passSaved': 'Password saved',
+      'me.phoneFixed': 'To change your number, contact customer service.', 'me.saved': 'Profile saved',
+      'dl.arrived': 'The driver has arrived at the destination.', 'dl.proof': 'They added {n} delivery photo(s) as proof.',
+      'dl.optional': 'Check your goods. Confirming is optional: without a reply, the trip closes automatically in {t}.',
+      'dl.ok': 'Everything is fine', 'dl.disputed': 'Report received: automatic closing is paused. Support will contact you.',
+      'dl.auto': 'Trip closed automatically, without a reply from you, based on the driver’s proof of delivery.',
+      'dl.support': 'Delivery validated by support after review.', 'dl.proofs': 'Driver’s proof: {a} photo(s) at loading, {b} at delivery.',
+      'rt.q': 'How was your trip with {n}?', 'rt.w1': 'Very bad', 'rt.w2': 'Bad', 'rt.w3': 'Average', 'rt.w4': 'Good', 'rt.w5': 'Excellent',
+      'rt.why': 'What did you like?', 'rt.whyBad': 'What went wrong?', 'rt.send': 'Send rating', 'rt.thanks': 'Thank you, your rating helps other customers.',
+      'rt.pending': 'Rate your trip with {n}', 'rt.rate': 'Rate',
+      'tag.punctual': 'On time', 'tag.careful': 'Careful with my goods', 'tag.friendly': 'Friendly', 'tag.driving': 'Safe driving', 'tag.helpful': 'Helped with loading',
+      'tag.late': 'Late', 'tag.damage': 'Damaged items', 'tag.rude': 'Rude', 'tag.unsafe': 'Dangerous driving', 'tag.price': 'Asked for more than the agreed price',
+      'd.proofHint': 'Photos = proof in case of dispute, and they close the trip if the customer does not reply.',
+      'd.autoIn': 'Without a reply from the customer, automatic closing in {t}.', 'a.supportClose': 'Validate delivery (support)'
+    }
+  });
+
+  const TAGS_GOOD = ['punctual', 'careful', 'friendly', 'driving', 'helpful'];
+  const TAGS_BAD = ['late', 'damage', 'rude', 'unsafe', 'price'];
+  const PHONE_RE = /^(01|05|07|21|25|27)\d{8}$/;
+  const OTP_TTL = 5 * 60 * 1000, RESEND_S = 30;
+  const fmtPhone = p => '+225 ' + String(p).replace(/(\d{2})(?=\d)/g, '$1 ');
+  const initials = n => esc(String(n).split(' ').map(s => s[0] || '').join('').slice(0, 2).toUpperCase());
+  const mmss = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+  async function hashPass(phone, pass) {
+    const data = new TextEncoder().encode(`takaata:${phone}:${pass}`);
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) { return 'raw:' + btoa(unescape(encodeURIComponent(pass))); }
+  }
+
+  function sendOtp() {
+    const a = view.auth;
+    a.otp = String(Math.floor(100000 + Math.random() * 900000));
+    a.otpAt = Date.now();
+    a.step = 'otp';
+    a.err = '';
+  }
+
+  function authView() {
+    const a = view.auth;
+    const err = a.err ? `<p class="field-error" role="alert">${esc(a.err)}</p>` : '';
+    const head = (title, sub) => `<div class="auth-head"><span class="brand-mark auth-mark" aria-hidden="true"></span>
+      <h1 class="app-title">${esc(title)}</h1><p class="sub">${esc(sub)}</p></div>`;
+    const phoneField = `<label class="field"><span>${esc(t('au.phone'))}</span>
+      <span class="phone-in"><b class="mono">+225</b><input id="auth-phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" value="${esc(a.phone || '')}" placeholder="07 00 00 00 00" required></span></label>`;
+    let body = '';
+    if (a.step === 'form' && a.mode === 'signup') {
+      body = `${head(t('au.signupT'), t('au.signupS'))}
+        <form class="auth-form" id="authForm" novalidate>
+          <div class="row-2">
+            <label class="field"><span>${esc(t('au.first'))}</span><input id="auth-first" autocomplete="given-name" value="${esc(a.first || '')}" required></label>
+            <label class="field"><span>${esc(t('au.last'))}</span><input id="auth-last" autocomplete="family-name" value="${esc(a.last || '')}" required></label>
+          </div>
+          ${phoneField}${err}
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.getCode'))}</button>
+        </form>
+        <button class="link-btn auth-switch" type="button" data-act="auth-mode" data-mode="login">${esc(t('au.haveAccount'))}</button>`;
+    } else if (a.step === 'form') {
+      body = `${head(t('au.loginT'), t('au.loginS'))}
+        <form class="auth-form" id="authForm" novalidate>${phoneField}${err}
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.continue'))}</button>
+        </form>
+        <button class="link-btn auth-switch" type="button" data-act="auth-mode" data-mode="signup">${esc(t('au.noAccount'))}</button>`;
+    } else if (a.step === 'choose') {
+      const acc = store.account(a.phone);
+      body = `${head(t('au.helloT', { n: acc.firstName }), t('au.chooseS'))}
+        <div class="auth-form">
+          <button class="btn btn-signal btn-block" type="button" data-act="auth-sms">${esc(t('au.bySms'))}</button>
+          <button class="btn btn-ghost btn-block" type="button" data-act="auth-pass">${esc(t('au.byPass'))}</button>
+        </div>
+        <button class="link-btn auth-switch" type="button" data-act="auth-edit">${esc(t('au.editPhone'))}</button>`;
+    } else if (a.step === 'otp') {
+      const wait = RESEND_S - Math.floor((Date.now() - a.otpAt) / 1000);
+      body = `${head(t('au.otpT'), t('au.otpS', { p: fmtPhone(a.phone) }))}
+        <p class="notice">${esc(t('au.demoCode', { c: a.otp }))}</p>
+        <form class="auth-form" id="authForm" novalidate>
+          <label class="field"><span class="sr-only">${esc(t('au.otpT'))}</span>
+            <input id="auth-otp" class="otp-in mono" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required></label>
+          ${err}
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.verify'))}</button>
+        </form>
+        <div class="auth-links">
+          <button class="link-btn" type="button" data-act="auth-resend"${wait > 0 ? ' disabled' : ''}>${esc(wait > 0 ? t('au.resendIn', { s: wait }) : t('au.resend'))}</button>
+          <button class="link-btn" type="button" data-act="auth-edit">${esc(t('au.editPhone'))}</button>
+        </div>`;
+    } else if (a.step === 'password') {
+      body = `${head(t('au.passT'), fmtPhone(a.phone))}
+        <form class="auth-form" id="authForm" novalidate>
+          <label class="field"><span>${esc(t('au.password'))}</span><input id="auth-pass" type="password" autocomplete="current-password" required></label>
+          ${err}
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.signin'))}</button>
+        </form>
+        <button class="link-btn auth-switch" type="button" data-act="auth-sms">${esc(t('au.forgot'))}</button>`;
+    } else if (a.step === 'setpass') {
+      body = `${head(t('au.setPassT'), t('au.setPassS'))}
+        <form class="auth-form" id="authForm" novalidate>
+          <label class="field"><span>${esc(t('au.newPass'))}</span><input id="auth-newpass" type="password" autocomplete="new-password" minlength="6"></label>
+          ${err}
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.save'))}</button>
+        </form>
+        <button class="link-btn auth-switch" type="button" data-act="auth-skip">${esc(t('au.later'))}</button>`;
+    }
+    return `<section class="app-sec auth">${body}</section>`;
+  }
+
+  async function submitAuth() {
+    const a = view.auth;
+    const val = id => (document.getElementById(id) || {}).value || '';
+    if (a.step === 'form') {
+      a.phone = val('auth-phone').replace(/\D/g, '').replace(/^225(?=\d{10}$)/, '');
+      if (a.mode === 'signup') { a.first = val('auth-first').trim(); a.last = val('auth-last').trim(); }
+      if (a.mode === 'signup' && (!a.first || !a.last)) { a.err = t('au.badName'); return render(); }
+      if (!PHONE_RE.test(a.phone)) { a.err = t('au.badPhone'); return render(); }
+      const acc = store.account(a.phone);
+      if (a.mode === 'signup' && acc) { Object.assign(a, { mode: 'login', err: t('au.exists') }); return render(); }
+      if (a.mode === 'login' && !acc) { Object.assign(a, { mode: 'signup', err: t('au.unknown') }); return render(); }
+      if (a.mode === 'login' && acc.passHash) { a.step = 'choose'; a.err = ''; return render(); }
+      sendOtp();
+      return render();
+    }
+    if (a.step === 'otp') {
+      const code = val('auth-otp').replace(/\D/g, '');
+      if (Date.now() - a.otpAt > OTP_TTL) { a.err = t('au.expired'); return render(); }
+      if (code !== a.otp) { a.err = t('au.badOtp'); return render(); }
+      if (a.mode === 'signup') {
+        store.register({ phone: a.phone, firstName: a.first, lastName: a.last, coupons: [{ code: 'BIENVENUE', amount: 1000, used: false }] });
+        view.auth = { mode: 'signup', step: 'setpass', phone: a.phone };
+        return render();
+      }
+      store.login(a.phone);
+      return finishAuth();
+    }
+    if (a.step === 'password') {
+      const acc = store.account(a.phone);
+      if (acc && acc.passHash === await hashPass(a.phone, val('auth-pass'))) { store.login(a.phone); return finishAuth(); }
+      a.err = t('au.badPass');
+      return render();
+    }
+    if (a.step === 'setpass') {
+      const p = val('auth-newpass');
+      if (p.length < 6) { a.err = t('au.shortPass'); return render(); }
+      store.updateUser({ passHash: await hashPass(a.phone, p) });
+      return finishAuth();
+    }
+  }
+
+  function finishAuth() {
+    view.auth = { mode: 'signup', step: 'form' };
+    const u = store.user();
+    go('home');
+    if (u) ui.toast(t('au.welcome', { n: u.firstName }));
+  }
+
+  // Photo de profil : redimensionnée (160 px) avant d'être enregistrée.
+  function readPhoto(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 160, c = document.createElement('canvas');
+        c.width = c.height = size;
+        const s = Math.min(img.width, img.height);
+        c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+        store.updateUser({ photo: c.toDataURL('image/jpeg', 0.82) });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function avatar(u, cls) {
+    return u.photo
+      ? `<img class="${cls}" src="${u.photo}" alt="">`
+      : `<span class="${cls} avatar-ini" aria-hidden="true">${initials(u.firstName + ' ' + u.lastName)}</span>`;
+  }
+
+  const MENU_ICONS = {
+    coupons: 'M3 7h18v4a2 2 0 0 0 0 4v4H3v-4a2 2 0 0 0 0-4zM10 7v12',
+    invoices: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
+    support: 'M4 13a8 8 0 0 1 16 0v4h-4v-5h4M4 12h4v5H4zM16 17a4 4 0 0 1-4 3',
+    invite: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M19 8v6M16 11h6',
+    settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .2-1.3-1.3L17 5l-3-1-1 2h-2L10 4 7 5l.3 1.9L6 8.2 4 8l-1 3 2 1v0l-2 1 1 3 2-.2 1.3 1.3L7 19l3 1 1-2h2l1 2 3-1-.3-1.9 1.3-1.3 2 .2 1-3z'
+  };
+
+  function meView() {
+    const u = store.user();
+    const sub = view.meSub;
+    const mine = store.state.orders.filter(o => o.owner === 'me' && o.status === 'delivered');
+    const back = `<button class="link-btn" type="button" data-act="me-sub" data-sub="">← ${esc(t('me.back'))}</button>`;
+    const coupons = (u.coupons || []).filter(c => !c.used);
+
+    if (sub === 'coupons') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.coupons'))}</h1>
+        ${coupons.length ? coupons.map(c => `<article class="coupon">
+          <div class="coupon-val"><b class="mono">− ${fmt(c.amount)}</b><small>FCFA</small></div>
+          <div class="coupon-txt"><b>${esc(t('me.couponName'))} <span class="mono">${esc(c.code)}</span></b><small>${esc(t('me.couponD'))}</small><span class="pill pill-delivered">${esc(t('me.couponOk'))}</span></div>
+        </article>`).join('') : `<p class="empty">—</p>`}
+        <p class="hint">${esc(t('me.couponNote'))}</p></section>`;
+    }
+    if (sub === 'invoices') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.invoices'))}</h1>
+        ${mine.length ? `<div class="stack">${mine.map(orderRow).join('')}</div>` : `<p class="empty">${esc(t('me.noInvoices'))}</p>`}</section>`;
+    }
+    if (sub === 'support') {
+      const msgs = store.state.reports.filter(r => r.phone === u.phone);
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.support'))}</h1>
+        <dl class="kv"><div><dt>${esc(t('me.supportPhone'))}</dt><dd>${esc(t('me.tbd'))}</dd></div></dl>
+        <a class="me-link" href="#faq">${esc(t('me.faq'))} ›</a>
+        ${view.supportSent ? `<p class="notice">${esc(t('me.sent'))}</p>` : `
+        <form class="report" id="supportForm">
+          <label class="field"><span>${esc(t('me.write'))}</span><textarea id="supportText" rows="3" required placeholder="${esc(t('me.writePh'))}"></textarea></label>
+          <button class="btn btn-signal btn-sm" type="submit">${esc(t('t.send'))}</button>
+        </form>`}
+        ${msgs.length ? `<h2 class="app-h">${esc(t('me.myMsgs'))}</h2><ol class="ledger-list">${msgs.map(r => `<li><span><b>${esc(r.orderId || t('me.m.support'))}</b><small>${esc(r.text)}</small></span><span class="mono">${date(r.at)}</span></li>`).join('')}</ol>` : ''}
+      </section>`;
+    }
+    if (sub === 'invite') {
+      const codeStr = `${u.firstName.normalize('NFD').replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase()}-${u.phone.slice(-4)}`;
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.invite'))}</h1>
+        <p class="sub">${esc(t('me.inviteS'))}</p>
+        <div class="invite-code"><b class="mono select-all" id="inviteCode">${esc(codeStr)}</b>
+          <button class="btn btn-signal btn-sm" type="button" data-act="copy-code" data-code="${esc(codeStr)}">${esc(t('me.copy'))}</button></div>
+        <p class="hint">${esc(t('me.inviteNote'))}</p></section>`;
+    }
+    if (sub === 'settings') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.settings'))}</h1>
+        <fieldset class="chips"><legend>${esc(t('me.lang'))}</legend>
+          <button type="button" class="chip-btn${TK.getLang() === 'fr' ? ' is-on' : ''}" data-act="set-lang" data-lang="fr">Français</button>
+          <button type="button" class="chip-btn${TK.getLang() === 'en' ? ' is-on' : ''}" data-act="set-lang" data-lang="en">English</button>
+        </fieldset>
+        <label class="check"><input type="checkbox" id="set-notif"${u.notif ? ' checked' : ''}><span>${esc(t('me.notif'))}</span></label>
+        <form class="report" id="passForm">
+          <label class="field"><span>${esc(t(u.passHash ? 'me.passSet' : 'me.passNone'))}</span>
+            <input id="set-pass" type="password" autocomplete="new-password" minlength="6" placeholder="${esc(t('au.newPass'))}"></label>
+          <p class="field-error" id="set-pass-err" hidden>${esc(t('au.shortPass'))}</p>
+          <button class="btn btn-ghost btn-sm" type="submit">${esc(t('au.save'))}</button>
+        </form>
+        ${logoutBlock()}
+      </section>`;
+    }
+    if (sub === 'profile') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.profile'))}</h1>
+        <form class="auth-form" id="profileForm">
+          <div class="row-2">
+            <label class="field"><span>${esc(t('au.first'))}</span><input id="pf-first" value="${esc(u.firstName)}" required></label>
+            <label class="field"><span>${esc(t('au.last'))}</span><input id="pf-last" value="${esc(u.lastName)}" required></label>
+          </div>
+          <label class="field"><span>${esc(t('au.phone'))}</span><input value="${esc(fmtPhone(u.phone))}" disabled></label>
+          <p class="hint">${esc(t('me.phoneFixed'))}</p>
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.save'))}</button>
+        </form></section>`;
+    }
+
+    const spent = mine.reduce((a, o) => a + o.price, 0);
+    const item = (key, extra) => `<li><button type="button" class="me-item" data-act="me-sub" data-sub="${key}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${MENU_ICONS[key]}"/></svg><span>${esc(t('me.m.' + key))}</span>${extra || ''}<i aria-hidden="true">›</i></button></li>`;
+    return `
+      <section class="app-sec">
+        <div class="me-head">
+          <label class="me-photo" title="${esc(t('me.photo'))}">
+            ${avatar(u, 'me-avatar')}
+            <input type="file" accept="image/*" id="me-photo-in" data-act="me-photo" aria-label="${esc(t('me.photo'))}">
+            <span class="me-photo-edit" aria-hidden="true">+</span>
+          </label>
+          <div class="me-id">
+            <b>${esc(u.firstName)} ${esc(u.lastName)}</b>
+            <span class="mono">${esc(fmtPhone(u.phone))}</span>
+            <span>${u.ratingCount ? `<span class="stars">${stars(u.rating)}</span> ${u.rating.toLocaleString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} · ${esc(t(u.ratingCount > 1 ? 'me.notes' : 'me.note1', { n: u.ratingCount }))}` : `<span class="pill">${esc(t('me.newClient'))}</span>`}</span>
+          </div>
+          <button class="link-btn" type="button" data-act="me-sub" data-sub="profile">${esc(t('me.edit'))}</button>
+        </div>
+        <div class="me-stats">
+          <div><b class="mono">${mine.length}</b><small>${esc(t('me.trips'))}</small></div>
+          <div><b class="mono">${fmt(spent)}</b><small>${esc(t('me.spent'))} (FCFA)</small></div>
+          <div><b class="mono">${coupons.length}</b><small>${esc(t('me.coupons'))}</small></div>
+        </div>
+        <ul class="me-menu">
+          ${item('coupons', coupons.length ? `<span class="me-badge">${coupons.length}</span>` : '')}
+          ${item('invoices')}${item('support')}${item('invite')}${item('settings')}
+        </ul>
+        ${logoutBlock()}
+      </section>`;
+  }
+
+  function logoutBlock() {
+    if (!view.confirmLogout) return `<button class="link-btn danger" type="button" data-act="logout-ask">${esc(t('me.logout'))}</button>`;
+    return `<div class="confirm-inline"><p>${esc(t('me.logoutQ'))}</p><div class="btn-row">
+      <button class="btn btn-danger btn-sm" type="button" data-act="logout-yes">${esc(t('me.logout'))}</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-act="logout-no">${esc(t('a.resetNo'))}</button></div></div>`;
+  }
+
+  // Notation du chauffeur : étoiles, puis remarques rapides selon la note, commentaire facultatif.
+  function rateBlock(o) {
+    const name = o.driver.me ? t('o.you') : o.driver.name;
+    if (o.rating != null) {
+      return `<div class="rate-done"><span class="stars">${stars(o.rating)}</span><p>${esc(t('rt.thanks'))}</p>
+        ${o.ratingTags && o.ratingTags.length ? `<div class="tag-row">${o.ratingTags.map(k => `<span class="tag is-on">${esc(t('tag.' + k))}</span>`).join('')}</div>` : ''}</div>`;
+    }
+    if (!view.rate || view.rate.orderId !== o.id) view.rate = { orderId: o.id, stars: 0, tags: [] };
+    const r = view.rate;
+    const tags = r.stars >= 4 ? TAGS_GOOD : TAGS_BAD;
+    return `<section class="rate-card" aria-label="${esc(t('rt.q', { n: name }))}">
+      <div class="rate-who"><span class="avatar avatar-lg" aria-hidden="true">${initials(name)}</span><p>${esc(t('rt.q', { n: name }))}</p></div>
+      <div class="star-btns" role="radiogroup">${[1, 2, 3, 4, 5].map(n => `<button type="button" role="radio" aria-checked="${r.stars === n}" aria-label="${n} / 5" class="star-btn${n <= r.stars ? ' is-on' : ''}" data-act="star" data-n="${n}">★</button>`).join('')}</div>
+      ${r.stars ? `<p class="rate-word">${esc(t('rt.w' + r.stars))}</p>
+        <p class="app-h">${esc(t(r.stars >= 4 ? 'rt.why' : 'rt.whyBad'))}</p>
+        <div class="tag-row">${tags.map(k => `<button type="button" class="tag${r.tags.includes(k) ? ' is-on' : ''}" aria-pressed="${r.tags.includes(k)}" data-act="rate-tag" data-tag="${k}">${esc(t('tag.' + k))}</button>`).join('')}</div>
+        <label class="field"><span class="sr-only">${esc(t('r.commentPh'))}</span><input id="rateComment" placeholder="${esc(t('r.commentPh'))}"></label>
+        <button class="btn btn-signal btn-block" type="button" data-act="rate-send" data-id="${o.id}">${esc(t('rt.send'))}</button>` : ''}
+    </section>`;
   }
 
   // ---------- rendu ----------
@@ -630,11 +1033,14 @@
     try { if (active && active.selectionStart != null) caret = [active.selectionStart, active.selectionEnd]; } catch (e) { /* champ sans sélection */ }
 
     let body;
-    if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : clientHome();
+    // Le choix facultatif du mot de passe suit l'inscription, avant d'entrer dans l'app.
+    const signedIn = !!store.user() && view.auth.step !== 'setpass';
+    if (role === 'client' && !signedIn) body = authView();
+    else if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : view.name === 'me' ? meView() : clientHome();
     else if (role === 'driver') body = driverView();
     else body = adminView();
 
-    const withNav = role === 'client' && ['home', 'orders'].includes(view.name);
+    const withNav = role === 'client' && signedIn;
     root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${withNav ? bottomNav() : ''}`;
 
     Object.entries(keep).forEach(([id, v]) => {
@@ -678,6 +1084,35 @@
     switch (b.dataset.act) {
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
+      case 'me': go('me', { meSub: '', confirmLogout: false, supportSent: false }); break;
+      case 'me-sub': go('me', { meSub: b.dataset.sub, confirmLogout: false, supportSent: false }); break;
+      case 'logout-ask': view.confirmLogout = true; render(); break;
+      case 'logout-no': view.confirmLogout = false; render(); break;
+      case 'logout-yes': store.logout(); view.auth = { mode: 'login', step: 'form' }; go('home', { confirmLogout: false, draft: null }); break;
+      case 'set-lang': setLang(b.dataset.lang); break;
+      case 'copy-code': {
+        const c = b.dataset.code;
+        try { navigator.clipboard.writeText(c).then(() => ui.toast(t('me.copied')), () => selectText('inviteCode')); } catch (err) { selectText('inviteCode'); }
+        break;
+      }
+      case 'auth-mode': view.auth = { mode: b.dataset.mode, step: 'form', phone: view.auth.phone }; render(); break;
+      case 'auth-edit': view.auth = { mode: view.auth.mode, step: 'form', phone: view.auth.phone, first: view.auth.first, last: view.auth.last }; render(); break;
+      case 'auth-sms': case 'auth-resend': sendOtp(); render(); break;
+      case 'auth-pass': view.auth.step = 'password'; view.auth.err = ''; render(); break;
+      case 'auth-skip': finishAuth(); break;
+      case 'star': view.rate.stars = +b.dataset.n; view.rate.tags = view.rate.tags.filter(k => (view.rate.stars >= 4 ? TAGS_GOOD : TAGS_BAD).includes(k)); render(); break;
+      case 'rate-tag': {
+        const k = b.dataset.tag, tags = view.rate.tags;
+        view.rate.tags = tags.includes(k) ? tags.filter(x => x !== k) : tags.concat(k);
+        render();
+        break;
+      }
+      case 'rate-send': {
+        const c = document.getElementById('rateComment');
+        store.rate(id, view.rate.stars, view.rate.tags, c ? c.value.trim() : '');
+        break;
+      }
+      case 'support-close': store.confirmDelivery(id, 'support'); break;
       case 'locate': view.draft.loc = 'busy'; render(); locate(); break;
       case 'item': {
         const q = view.draft.itemsQty, k = b.dataset.k;
@@ -770,6 +1205,8 @@
   root.addEventListener('change', e => {
     const el = e.target;
     if (el.id === 'drvVehicle') { store.setDriver({ vehicle: el.value }); return; }
+    if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
+    if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
     if (el.dataset.act === 'photos') {
       const n = el.files ? el.files.length : 0;
       if (n) store.addPhotos(el.dataset.id, el.dataset.which, n);
@@ -801,9 +1238,33 @@
     }
   });
 
-  root.addEventListener('submit', e => {
+  root.addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target;
+    if (f.id === 'authForm') { submitAuth(); return; }
+    if (f.id === 'passForm') {
+      const p = document.getElementById('set-pass').value;
+      if (p.length < 6) { document.getElementById('set-pass-err').hidden = false; return; }
+      store.updateUser({ passHash: await hashPass(store.user().phone, p) });
+      ui.toast(t('me.passSaved'));
+      return;
+    }
+    if (f.id === 'profileForm') {
+      const first = document.getElementById('pf-first').value.trim(), last = document.getElementById('pf-last').value.trim();
+      if (!first || !last) return;
+      store.updateUser({ firstName: first, lastName: last });
+      ui.toast(t('me.saved'));
+      go('me', { meSub: '' });
+      return;
+    }
+    if (f.id === 'supportForm') {
+      const text = document.getElementById('supportText').value.trim();
+      if (!text) return;
+      store.report(null, text);
+      view.supportSent = true;
+      render();
+      return;
+    }
     if (f.id === 'homeForm') {
       if (view.draft.service === 'handling' && view.draft.helpers < 1) view.draft.helpers = 1;
       go('wizard', { step: 3 });
@@ -845,14 +1306,25 @@
   });
 
   // Langue (site + app)
-  document.addEventListener('click', e => {
-    if (!e.target.closest('[data-lang-toggle]')) return;
-    const next = TK.getLang() === 'fr' ? 'en' : 'fr';
+  function setLang(next) {
     TK.setLang(next);
     store.set({ lang: next });
     TK.applyStatic();
     TKSite.refresh();
     render();
+  }
+  function selectText(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[data-lang-toggle]')) return;
+    setLang(TK.getLang() === 'fr' ? 'en' : 'fr');
   });
 
   window.addEventListener('hashchange', () => {
@@ -875,6 +1347,12 @@
       if (ev.type === 'accepted' && currentRole() === 'driver') ui.toast(t('toast.accepted'));
       if (ev.type === 'declined' && currentRole() === 'driver') ui.toast(t('d.declined'));
     });
+    // Comptes à rebours : clôture automatique, renvoi du code SMS.
+    const role = currentRole();
+    const o = view.name === 'order' && store.getOrder(view.orderId);
+    if (role === 'client' && !store.user() && view.auth.step === 'otp') render();
+    else if (role === 'client' && o && o.status === 'arrived' && o.autoConfirmAt) render();
+    else if (role === 'driver' && store.state.orders.some(x => x.driver && x.driver.me && x.status === 'arrived')) render();
   }, 1000);
 
   window.TKApp = {

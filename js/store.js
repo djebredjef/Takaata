@@ -16,6 +16,9 @@
 
   // Délais de la simulation (ms)
   const SIM = { offers: [2500, 5500, 9000, 13000], steps: [7000, 15000, 25000, 35000], decision: 3500, autoConfirm: 4000 };
+  // Sans réponse du client après l'arrivée, la course est clôturée sur la preuve du chauffeur.
+  // Prototype : 60 s pour la démonstration (valeur réelle à fixer, par ex. 2 h).
+  const AUTO_CLOSE_MS = 60 * 1000;
   const FREE_CANCEL_MS = 5 * 60 * 1000;
 
   let state;
@@ -52,6 +55,8 @@
       },
       reports: [],
       leads: [],
+      accounts: {},     // comptes clients par numéro (prototype local ; Firebase Auth au lancement)
+      session: null,    // numéro du client connecté
       seeded: false
     };
   }
@@ -206,16 +211,28 @@
     o.status = NEXT[o.status];
     o.timeline[o.status] = Date.now();
     if (o.schedule) delete o.schedule[o.status];
-    if (o.status === 'arrived' && o.owner === 'other') o.autoConfirmAt = Date.now() + SIM.autoConfirm;
+    // Le chauffeur simulé documente le chargement et la livraison par photos.
+    if (o.sim && o.status === 'loading') o.photos.start = Math.max(o.photos.start, 2);
+    if (o.sim && o.status === 'arrived') o.photos.end = Math.max(o.photos.end, 2);
+    if (o.status === 'arrived') o.autoConfirmAt = Date.now() + (o.owner === 'other' ? SIM.autoConfirm : AUTO_CLOSE_MS);
     emit();
   }
 
   // Confirmation de livraison : débit unique de la commission (espèces) ou reversement net (Mobile Money).
-  function confirmDelivery(orderId) {
+  // by : 'client' (confirmation), 'auto' (sans réponse, sur preuve du chauffeur) ou 'support' (litige tranché).
+  function confirmDelivery(orderId, by = 'client') {
     const o = getOrder(orderId);
     if (!o || o.status !== 'arrived') return;
     o.status = 'delivered';
+    o.closedBy = by;
+    delete o.autoConfirmAt;
     o.timeline.delivered = Date.now();
+    // Le chauffeur note aussi le client (simulé : 5 étoiles).
+    const u = user();
+    if (o.owner === 'me' && u) {
+      u.rating = ((u.rating || 5) * (u.ratingCount || 0) + 5) / ((u.ratingCount || 0) + 1);
+      u.ratingCount = (u.ratingCount || 0) + 1;
+    }
     if (o.driver && o.driver.me) {
       const c = o.commission;
       delete state.driver.holds[o.id];
@@ -247,12 +264,26 @@
     emit();
   }
 
-  function rate(orderId, stars, comment) {
+  function rate(orderId, stars, tags, comment) {
     const o = getOrder(orderId);
-    if (!o) return;
+    if (!o || o.rating != null) return;
     o.rating = stars;
+    o.ratingTags = tags || [];
     o.ratingComment = comment || '';
+    if (o.driver && o.driver.me) {
+      const d = state.driver;
+      d.ratingSum = (d.ratingSum || 0) + stars;
+      d.ratingCount = (d.ratingCount || 0) + 1;
+    }
     emit();
+  }
+
+  // Signalement : pendant la livraison, il suspend la clôture automatique (litige traité par le support).
+  function dispute(orderId) {
+    const o = getOrder(orderId);
+    if (!o || o.status !== 'arrived') return;
+    o.disputed = true;
+    delete o.autoConfirmAt;
   }
 
   function addPhotos(orderId, which, count) {
@@ -263,9 +294,22 @@
   }
 
   function report(orderId, text) {
-    state.reports.unshift({ at: Date.now(), orderId, text });
+    state.reports.unshift({ at: Date.now(), orderId, text, phone: state.session });
+    if (orderId) dispute(orderId);
     emit();
   }
+
+  // --- comptes clients ---
+  function user() { return state.session ? state.accounts[state.session] : null; }
+  function account(phone) { return state.accounts[phone] || null; }
+  function register(info) {
+    state.accounts[info.phone] = Object.assign({ createdAt: Date.now(), rating: 5, ratingCount: 0, photo: '', passHash: '', notif: true }, info);
+    state.session = info.phone;
+    emit();
+  }
+  function login(phone) { if (state.accounts[phone]) { state.session = phone; emit(); } }
+  function logout() { state.session = null; emit(); }
+  function updateUser(patch) { const u = user(); if (u) { Object.assign(u, patch); emit(); } }
 
   // Boucle de simulation : offres, réponses des clients simulés, progression des courses.
   function tick() {
@@ -305,7 +349,7 @@
       }
       if (o.autoConfirmAt && now >= o.autoConfirmAt) {
         delete o.autoConfirmAt;
-        confirmDelivery(o.id);
+        confirmDelivery(o.id, o.owner === 'other' ? 'client' : 'auto');
         changed = true;
       }
     }
@@ -314,9 +358,9 @@
   }
 
   function reset() {
-    const lang = state.lang;
+    const { lang, accounts, session } = state;
     state = defaultState();
-    state.lang = lang;
+    Object.assign(state, { lang, accounts, session });
     seed();
     emit();
   }
@@ -333,7 +377,8 @@
       subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
       advance, confirmDelivery, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
-      held, available, NEXT
+      user, account, register, login, logout, updateUser,
+      held, available, NEXT, AUTO_CLOSE_MS
     }
   });
 })();
