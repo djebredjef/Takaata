@@ -94,7 +94,8 @@
     'c.active': 'En cours', 'c.resume': 'Voir',
     'c.history': 'Mes courses', 'c.noHistory': 'Aucune course pour le moment. Votre première commande apparaîtra ici.',
 
-    'w.step': 'Étape {n} sur 4', 'w.s1': 'Trajet', 'w.s2': 'Véhicule', 'w.s3': 'Chargement', 'w.s4': 'Prix et paiement',
+    'w.step': 'Étape {n} sur 3', 'w.swap': 'Inverser départ et arrivée', 'bn.order': 'Commander',
+    'h.priceHint': 'Prix de référence pour ce trajet. Vous pourrez ajuster votre prix avant de publier.', 'w.s1': 'Trajet', 'w.s2': 'Véhicule', 'w.s3': 'Chargement', 'w.s4': 'Prix et paiement',
     'w.fromDetail': 'Quartier et repère au départ', 'w.toDetail': "Quartier et repère à l'arrivée",
     'w.detailPh': 'ex. Siporex, près de la pharmacie',
     'w.when': 'Quand ?', 'w.now': 'Dès que possible', 'w.later': 'Planifier', 'w.sameCommune': 'Trajet dans la même commune : distance estimée à {km} km.',
@@ -253,7 +254,8 @@
     'c.active': 'In progress', 'c.resume': 'View',
     'c.history': 'My trips', 'c.noHistory': 'No trips yet. Your first booking will show up here.',
 
-    'w.step': 'Step {n} of 4', 'w.s1': 'Route', 'w.s2': 'Vehicle', 'w.s3': 'Load', 'w.s4': 'Price & payment',
+    'w.step': 'Step {n} of 3', 'w.swap': 'Swap pickup and drop-off', 'bn.order': 'Book',
+    'h.priceHint': 'Reference price for this trip. You can adjust your price before posting.', 'w.s1': 'Route', 'w.s2': 'Vehicle', 'w.s3': 'Load', 'w.s4': 'Price & payment',
     'w.fromDetail': 'Neighbourhood and landmark at pickup', 'w.toDetail': 'Neighbourhood and landmark at drop-off',
     'w.detailPh': 'e.g. Siporex, next to the pharmacy',
     'w.when': 'When?', 'w.now': 'As soon as possible', 'w.later': 'Schedule', 'w.sameCommune': 'Trip within the same district: estimated at {km} km.',

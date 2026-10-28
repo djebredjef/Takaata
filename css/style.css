@@ -627,3 +627,68 @@ html.sheet-open { overflow: hidden; }
 .photo-switch { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .photo-chip { padding: 5px 12px; border-radius: 99px; border: 1.5px solid #C9D3D2; background: #FFFFFF; color: #3E555A; font: 600 13px var(--font-body); cursor: pointer; }
 .photo-chip.is-on { background: #0E2A33; border-color: #0E2A33; color: #FFFFFF; }
+
+/* =================== ACCUEIL CLIENT =================== */
+.home { display: grid; gap: 14px; padding-block: 12px 8px; }
+.home-active { padding-block: 12px 0; display: grid; gap: 10px; }
+
+/* besoins : petits onglets en ligne, défilants */
+.need-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin-inline: calc(-1 * var(--gutter-l)) calc(-1 * var(--gutter-r)); padding-inline: var(--gutter-l) var(--gutter-r); padding-block: 2px; }
+.need-row::-webkit-scrollbar { display: none; }
+.need-chip { position: relative; flex: none; }
+.need-chip input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.need-chip span {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px 6px 8px; border-radius: 99px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap;
+}
+.need-chip .need-ic { width: 18px; height: 18px; margin: 0; background: var(--muted); flex: none; }
+.need-chip input:checked + span { border-color: var(--signal); background: var(--signal-soft); color: var(--signal); }
+.need-chip input:checked + span .need-ic { background: var(--signal); }
+.need-chip input:focus-visible + span { outline: 3px solid var(--signal); outline-offset: 2px; }
+
+.home-veh { display: grid; gap: 10px; }
+
+/* adresses */
+.addr-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px 10px; display: grid; }
+.addr-row { display: flex; gap: 12px; align-items: flex-start; padding-block: 10px; padding-right: 40px; }
+.addr-row + .addr-swap + .addr-row { border-top: 1px dashed var(--line); }
+.addr-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 6px; }
+.addr-dot-from { background: var(--leaf); box-shadow: 0 0 0 4px var(--leaf-soft); }
+.addr-dot-to { background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
+.addr-fields { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.addr-label { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.addr-fields select {
+  border: 0; background: transparent; color: var(--ink); font: 700 18px var(--font-body); padding: 2px 0; min-height: 32px;
+  width: 100%; cursor: pointer;
+}
+.addr-fields input {
+  border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--ink); font: 14px var(--font-body);
+  padding: 4px 0; min-height: 30px; width: 100%;
+}
+.addr-fields input::placeholder { color: var(--muted); opacity: .8; }
+.addr-fields select:focus, .addr-fields input:focus { outline: none; border-bottom-color: var(--signal); }
+.addr-swap {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-70%); width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: 16px; cursor: pointer;
+}
+.addr-km { font-size: 13px; color: var(--muted); padding-left: 24px; }
+.addr-km b { color: var(--ink); margin-left: 4px; }
+
+/* barre du bas */
+.app-main.has-nav { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+.home-actions { bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; display: flex; justify-content: center; gap: 0;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 6px max(16px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.bn-item { flex: 1; max-width: 200px; display: grid; justify-items: center; gap: 2px; padding: 4px; border: 0; background: none; color: var(--muted); font: 600 12px var(--font-body); cursor: pointer; }
+.bn-item svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.bn-item.is-on { color: var(--signal); }
+.bn-item.is-on svg path { fill: var(--signal-soft); }
+/* accueil compact */
+.home .veh-sum { font-size: 13.5px; line-height: 1.4; }
+.home .addr-row { padding-block: 7px; }
+.home .addr-fields select { font-size: 17px; min-height: 28px; }
+.home .addr-fields input { min-height: 26px; padding-block: 2px; font-size: 13.5px; }
+.home .addr-dot { margin-top: 4px; }

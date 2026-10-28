@@ -41,25 +41,85 @@
   }
 
   // ---------- CLIENT ----------
+  const helperOpts = { service: 'handling', helpers: 1 };
+  function servicePrices(d, kmVal) {
+    return {
+      handling: quote(d.vehicle, kmVal, helperOpts).reference,
+      transport: quote(d.vehicle, kmVal, { service: 'transport' }).reference
+    };
+  }
+
+  // Accueil façon « choix du véhicule » : besoin, véhicule, adresses, puis prix sans aide / avec aide.
   function clientHome() {
+    const d = view.draft || (view.draft = newDraft());
+    const kmVal = distanceKm(d.from, d.to);
+    const V = TK.vehicles;
+    const prices = servicePrices(d, kmVal);
+    const active = store.state.orders.filter(o => o.owner === 'me' && ACTIVE.includes(o.status));
+    const svc = kind => `
+      <label class="svc-card${d.service === kind ? ' is-on' : ''}">
+        <input type="radio" name="service" id="h-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
+        <span class="svc-check" aria-hidden="true"></span>
+        <span class="svc-txt"><b>${esc(t('svc.' + kind))}</b><small>${esc(t('svc.' + kind + 'D'))}</small></span>
+        <span class="svc-price"><b class="mono">${fmt(prices[kind])}</b><small>FCFA · ${esc(t('svc.from'))}</small></span>
+      </label>`;
+    const addr = (side, dot) => `
+      <div class="addr-row">
+        <span class="addr-dot addr-dot-${dot}" aria-hidden="true"></span>
+        <div class="addr-fields">
+          <label class="addr-label" for="h-${side}">${esc(t(side === 'from' ? 'quote.from' : 'quote.to'))}</label>
+          <select id="h-${side}" data-bind="${side}">${ui.communeOptions(d[side])}</select>
+          <input id="h-${side}Detail" data-bind="${side}Detail" value="${esc(d[side + 'Detail'])}" placeholder="${esc(t('w.detailPh'))}" aria-label="${esc(t(side === 'from' ? 'w.fromDetail' : 'w.toDetail'))}">
+        </div>
+      </div>`;
+    return `
+      ${active.length ? `<section class="home-active"><h2 class="app-h">${esc(t('c.active'))}</h2><div class="stack">${active.map(orderRow).join('')}</div></section>` : ''}
+      <form class="home" id="homeForm" novalidate>
+        <div class="need-row" role="radiogroup" aria-label="${esc(t('c.hello'))}">
+          ${NEEDS.map(n => `<label class="need-chip"><input type="radio" name="need" id="h-need-${n}" value="${n}" data-bind="need"${d.need === n ? ' checked' : ''}><span><i class="need-ic need-${n}" aria-hidden="true"></i>${esc(t('need.' + n))}</span></label>`).join('')}
+        </div>
+        <section class="home-veh">
+          ${V.tabs(d.vehicle, 'data-veh-tab')}
+          ${V.stage(d.vehicle, 'data-veh-step')}
+          <div class="veh-sum">
+            <p>${esc(t('sum.' + d.vehicle))}</p>
+            <button type="button" class="link-btn veh-how" data-veh-open="${d.vehicle}">${esc(t('vs.how'))} ›</button>
+          </div>
+        </section>
+        <section class="addr-card">
+          ${addr('from', 'from')}
+          <button type="button" class="addr-swap" data-act="swap" aria-label="${esc(t('w.swap'))}">⇅</button>
+          ${addr('to', 'to')}
+          <p class="addr-km">${esc(t('quote.distance'))} <b class="mono">${ui.km(kmVal)}</b></p>
+        </section>
+        <fieldset class="svc-list"><legend class="sr-only">${esc(t('w.service'))}</legend>${svc('transport')}${svc('handling')}</fieldset>
+        <p class="hint">${esc(t('h.priceHint'))}</p>
+        <div class="wiz-actions home-actions">
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('w.next'))} · ${fcfa(prices[d.service] || prices.transport)}</button>
+        </div>
+      </form>`;
+  }
+
+  function ordersView() {
     const mine = store.state.orders.filter(o => o.owner === 'me');
     const active = mine.filter(o => ACTIVE.includes(o.status));
     const past = mine.filter(o => !ACTIVE.includes(o.status));
     return `
-      ${active.length ? `<section class="app-sec"><h2 class="app-h">${esc(t('c.active'))}</h2>
-        <div class="stack">${active.map(orderRow).join('')}</div></section>` : ''}
       <section class="app-sec">
-        <h1 class="app-title">${esc(t('c.hello'))}</h1>
-        <div class="need-grid">
-          ${NEEDS.map(n => `<button class="need-btn" type="button" data-act="start" data-need="${n}">
-            <span class="need-ic need-${n}" aria-hidden="true"></span>
-            <b>${esc(t('need.' + n))}</b><small>${esc(t('needd.' + n))}</small></button>`).join('')}
-        </div>
-      </section>
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('c.history'))}</h2>
-        ${past.length ? `<div class="stack">${past.map(orderRow).join('')}</div>` : `<p class="empty">${esc(t('c.noHistory'))}</p>`}
+        <h1 class="app-title">${esc(t('c.history'))}</h1>
+        ${active.length ? `<h2 class="app-h">${esc(t('c.active'))}</h2><div class="stack">${active.map(orderRow).join('')}</div>` : ''}
+        ${past.length ? `<div class="stack">${past.map(orderRow).join('')}</div>` : active.length ? '' : `<p class="empty">${esc(t('c.noHistory'))}</p>`}
       </section>`;
+  }
+
+  // Barre du bas (client) : Commander / Mes courses.
+  function bottomNav() {
+    const item = (act, key, path) => `<button type="button" class="bn-item${view.name === act ? ' is-on' : ''}" data-act="${act}"${view.name === act ? ' aria-current="page"' : ''}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><span>${esc(t(key))}</span></button>`;
+    return `<nav class="bottom-nav" aria-label="${esc(t('role.client'))}">
+      ${item('home', 'bn.order', 'M3 11 12 4l9 7v9h-6v-6H9v6H3z')}
+      ${item('orders', 'c.history', 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4')}
+    </nav>`;
   }
 
   function orderRow(o) {
@@ -69,62 +129,18 @@
     </button>`;
   }
 
+  // Suite de la commande après l'accueil : 3 = chargement, 4 = prix et paiement.
   function wizard() {
     const d = view.draft, step = view.step;
     const q = draftQuote(d);
     const kmVal = distanceKm(d.from, d.to);
-    const titles = ['w.s1', 'w.s2', 'w.s3', 'w.s4'];
+    const titles = { 3: 'w.s3', 4: 'w.s4' };
     let body = '';
-
-    if (step === 1) {
-      body = `
-        <fieldset class="chips"><legend class="sr-only">Besoin</legend>
-          ${NEEDS.map(n => `<label class="chip-radio"><input type="radio" name="need" id="w-need-${n}" value="${n}" data-bind="need"${d.need === n ? ' checked' : ''}><span>${esc(t('need.' + n))}</span></label>`).join('')}
-        </fieldset>
-        <div class="route-fields">
-          <label class="field"><span>${esc(t('quote.from'))}</span><select id="w-from" data-bind="from">${ui.communeOptions(d.from)}</select></label>
-          <label class="field"><span>${esc(t('w.fromDetail'))}</span><input id="w-fromDetail" data-bind="fromDetail" value="${esc(d.fromDetail)}" placeholder="${esc(t('w.detailPh'))}"></label>
-          <label class="field"><span>${esc(t('quote.to'))}</span><select id="w-to" data-bind="to">${ui.communeOptions(d.to)}</select></label>
-          <label class="field"><span>${esc(t('w.toDetail'))}</span><input id="w-toDetail" data-bind="toDetail" value="${esc(d.toDetail)}" placeholder="${esc(t('w.detailPh'))}"></label>
-        </div>
-        <div class="map-card">${ui.routeMap(d.from, d.to, null)}<p class="mono">${ui.km(kmVal)}</p></div>
-        ${d.from === d.to ? `<p class="hint">${esc(t('w.sameCommune', { km: kmVal }))}</p>` : ''}
-        <fieldset class="chips"><legend>${esc(t('w.when'))}</legend>
-          <label class="chip-radio"><input type="radio" name="when" id="w-when-now" value="now" data-bind="when"${d.when === 'now' ? ' checked' : ''}><span>${esc(t('w.now'))}</span></label>
-          <label class="chip-radio"><input type="radio" name="when" id="w-when-later" value="later" data-bind="when"${d.when === 'later' ? ' checked' : ''}><span>${esc(t('w.later'))}</span></label>
-        </fieldset>
-        ${d.when === 'later' ? `<label class="field"><span class="sr-only">${esc(t('w.later'))}</span><input type="datetime-local" id="w-whenAt" data-bind="whenAt" value="${esc(d.whenAt)}"></label>` : ''}`;
-    }
-
-    if (step === 2) {
-      // Présentation façon « choix du véhicule » : onglets, caisse chargée, formules de service.
-      const V = TK.vehicles;
-      const prices = {
-        handling: quote(d.vehicle, kmVal, { service: 'handling', helpers: 1 }).reference,
-        transport: quote(d.vehicle, kmVal, { service: 'transport' }).reference
-      };
-      const svc = kind => `
-        <label class="svc-card${d.service === kind ? ' is-on' : ''}">
-          <input type="radio" name="service" id="w-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
-          <span class="svc-check" aria-hidden="true"></span>
-          <span class="svc-txt"><b>${esc(t('svc.' + kind))}</b><small>${esc(t('svc.' + kind + 'D'))}</small></span>
-          <span class="svc-price"><b class="mono">${fmt(prices[kind])}</b><small>FCFA · ${esc(t('svc.from'))}</small></span>
-        </label>`;
-      body = `
-        ${V.tabs(d.vehicle, 'data-veh-tab')}
-        ${V.stage(d.vehicle, 'data-veh-step')}
-        <div class="veh-sum">
-          <p>${esc(t('sum.' + d.vehicle))}</p>
-          <button type="button" class="link-btn veh-how" data-veh-open="${d.vehicle}">${esc(t('vs.how'))} ›</button>
-        </div>
-        <fieldset class="svc-list"><legend class="sr-only">${esc(t('w.service'))}</legend>${svc('handling')}${svc('transport')}</fieldset>
-        <p class="hint">${esc(t('quote.distance'))} : <span class="mono">${ui.km(kmVal)}</span> · ${esc(t('vs.tap'))}</p>`;
-    }
 
     if (step === 3) {
       const handling = d.service === 'handling';
       body = `
-        <p class="notice">${esc(t('veh.' + d.vehicle))} · ${esc(t(handling ? 'svc.handling' : 'svc.transport'))}</p>
+        <p class="notice">${route(d)} · ${esc(t('veh.' + d.vehicle))} · ${esc(t(handling ? 'svc.handling' : 'svc.transport'))}</p>
         <label class="field"><span>${esc(t('w.items'))}</span><textarea id="w-items" rows="3" data-bind="items" placeholder="${esc(t('w.itemsPh'))}">${esc(d.items)}</textarea></label>
         <p class="field-error" id="w-items-err" hidden>${esc(t('w.itemsRequired'))}</p>
         <label class="field"><span>${esc(t('w.weight'))}</span><input id="w-weight" data-bind="weight" value="${esc(d.weight)}" placeholder="ex. 150 kg"></label>
@@ -161,6 +177,11 @@
           </div>
           <p class="field-error" id="w-price-err" hidden>${esc(t('w.belowMin', { min: fcfa(q.minimum) }))}</p>
         </div>
+        <fieldset class="chips"><legend>${esc(t('w.when'))}</legend>
+          <label class="chip-radio"><input type="radio" name="when" id="w-when-now" value="now" data-bind="when"${d.when === 'now' ? ' checked' : ''}><span>${esc(t('w.now'))}</span></label>
+          <label class="chip-radio"><input type="radio" name="when" id="w-when-later" value="later" data-bind="when"${d.when === 'later' ? ' checked' : ''}><span>${esc(t('w.later'))}</span></label>
+        </fieldset>
+        ${d.when === 'later' ? `<label class="field"><span class="sr-only">${esc(t('w.later'))}</span><input type="datetime-local" id="w-whenAt" data-bind="whenAt" value="${esc(d.whenAt)}"></label>` : ''}
         <fieldset class="chips"><legend>${esc(t('w.payment'))}</legend>
           ${PAYMENTS.map(p => `<label class="chip-radio"><input type="radio" name="payment" id="w-pay-${p}" value="${p}" data-bind="payment"${d.payment === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}
         </fieldset>
@@ -170,11 +191,11 @@
     return `
       <section class="app-sec wizard">
         <div class="wiz-head">
-          <button class="link-btn" type="button" data-act="${step === 1 ? 'home' : 'wiz-prev'}">← ${esc(t(step === 1 ? 'w.cancel' : 'w.prev'))}</button>
-          <span class="mono">${esc(t('w.step', { n: step }))}</span>
+          <button class="link-btn" type="button" data-act="${step === 3 ? 'home' : 'wiz-prev'}">← ${esc(t('w.prev'))}</button>
+          <span class="mono">${esc(t('w.step', { n: step - 1 }))}</span>
         </div>
-        <ol class="wiz-bar" aria-hidden="true">${titles.map((k, i) => `<li class="${i + 1 <= step ? 'is-done' : ''}"></li>`).join('')}</ol>
-        <h1 class="app-title">${esc(t(titles[step - 1]))}</h1>
+        <ol class="wiz-bar" aria-hidden="true">${[1, 2, 3].map(i => `<li class="${i <= step - 1 ? 'is-done' : ''}"></li>`).join('')}</ol>
+        <h1 class="app-title">${esc(t(titles[step]))}</h1>
         <form class="wiz-form" id="wizForm" novalidate>${body}
           <div class="wiz-actions">
             <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? 'w.publish' : 'w.next'))}${step === 4 ? ` · ${fcfa(d.price)}` : ''}</button>
@@ -269,7 +290,7 @@
     return `
       <section class="app-sec">
         <div class="wiz-head">
-          <button class="link-btn" type="button" data-act="home">← ${esc(t('c.history'))}</button>
+          <button class="link-btn" type="button" data-act="orders">← ${esc(t('c.history'))}</button>
           <span class="mono">${esc(o.id)}</span>
         </div>
         <div class="order-top">
@@ -501,20 +522,30 @@
     // Conserver saisie, focus et défilement à travers les rendus.
     const keep = {};
     root.querySelectorAll('input[id]:not([type=radio]):not([type=checkbox]):not([type=file]), textarea[id], select[id]').forEach(el => { keep[el.id] = el.value; });
-    const focused = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : null;
+    const active = document.activeElement && root.contains(document.activeElement) ? document.activeElement : null;
+    const focused = active ? active.id : null;
+    let caret = null;
+    try { if (active && active.selectionStart != null) caret = [active.selectionStart, active.selectionEnd]; } catch (e) { /* champ sans sélection */ }
 
     let body;
-    if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : clientHome();
+    if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : clientHome();
     else if (role === 'driver') body = driverView();
     else body = adminView();
 
-    root.innerHTML = `${header(role)}<main class="app-main">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>`;
+    const withNav = role === 'client' && ['home', 'orders'].includes(view.name);
+    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${withNav ? bottomNav() : ''}`;
 
     Object.entries(keep).forEach(([id, v]) => {
       const el = document.getElementById(id);
       if (el && !el.dataset.bind) el.value = v;
     });
-    if (focused) { const el = document.getElementById(focused); if (el) el.focus({ preventScroll: true }); }
+    if (focused) {
+      const el = document.getElementById(focused);
+      if (el) {
+        el.focus({ preventScroll: true });
+        try { if (caret) el.setSelectionRange(caret[0], caret[1]); } catch (e) { /* ignore */ }
+      }
+    }
     TK.vehicles.centerTabs(root);
   }
 
@@ -531,7 +562,7 @@
   }
 
   root.addEventListener('click', e => {
-    if (view.name === 'wizard' && view.draft) {
+    if (view.draft && ['home', 'wizard'].includes(view.name)) {
       const vt = e.target.closest('[data-veh-tab]');
       if (vt) { setVehicle(vt.dataset.vehTab); return; }
       const vs = e.target.closest('[data-veh-step]');
@@ -544,12 +575,15 @@
     const id = b.dataset.id;
     switch (b.dataset.act) {
       case 'home': go('home'); break;
-      case 'start': {
-        const need = b.dataset.need;
-        go('wizard', { step: 1, draft: newDraft({ need, vehicle: NEED_VEHICLE[need], service: need === 'moving' ? 'handling' : 'transport' }) });
+      case 'orders': go('orders'); break;
+      case 'swap': {
+        const d = view.draft;
+        [d.from, d.to] = [d.to, d.from];
+        [d.fromDetail, d.toDetail] = [d.toDetail, d.fromDetail];
+        render();
         break;
       }
-      case 'wiz-prev': go('wizard', { step: Math.max(1, view.step - 1) }); break;
+      case 'wiz-prev': if (view.step <= 3) go('home'); else go('wizard', { step: view.step - 1 }); break;
       case 'count': {
         const f = b.dataset.f;
         view.draft[f] = Math.min(+b.dataset.max, Math.max(+b.dataset.min, view.draft[f] + +b.dataset.d));
@@ -615,7 +649,7 @@
   }
 
   // Glisser sur l'illustration pour changer de véhicule.
-  TK.vehicles.swipe(root, dir => { if (view.name === 'wizard' && view.draft) setVehicle(TK.vehicles.step(view.draft.vehicle, dir)); });
+  TK.vehicles.swipe(root, dir => { if (view.draft && view.name === 'home') setVehicle(TK.vehicles.step(view.draft.vehicle, dir)); });
 
   root.addEventListener('input', e => {
     if (e.target.matches('input[type=text], input:not([type]), textarea, input[type=number], input[type=datetime-local]')) bindValue(e.target);
@@ -630,6 +664,11 @@
       return;
     }
     if (bindValue(el)) {
+      // Choisir un besoin propose le véhicule le plus adapté.
+      if (el.dataset.bind === 'need') {
+        view.draft.vehicle = NEED_VEHICLE[el.value];
+        if (el.value === 'moving') view.draft.service = 'handling';
+      }
       // Les champs texte ne redessinent pas l'écran ; le reste met à jour prix et options.
       if (!el.matches('textarea, input:not([type]), input[type=text], input[type=datetime-local]')) {
         if (el.dataset.bind === 'price') {
@@ -647,7 +686,10 @@
   root.addEventListener('submit', e => {
     e.preventDefault();
     const f = e.target;
-    if (f.id === 'wizForm') {
+    if (f.id === 'homeForm') {
+      if (view.draft.service === 'handling' && view.draft.helpers < 1) view.draft.helpers = 1;
+      go('wizard', { step: 3 });
+    } else if (f.id === 'wizForm') {
       if (view.step === 3 && !view.draft.items.trim()) {
         document.getElementById('w-items-err').hidden = false;
         document.getElementById('w-items').focus();
@@ -719,7 +761,7 @@
 
   window.TKApp = {
     prefill(q) {
-      view.name = 'wizard'; view.step = 1;
+      view.name = 'home';
       view.draft = newDraft({ from: q.from, to: q.to, vehicle: q.vehicle, need: q.vehicle === 'tricycle' ? 'parcel' : 'furniture' });
     }
   };
