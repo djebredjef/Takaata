@@ -81,7 +81,7 @@
     fr: {
       'vs.how': 'Que peut-on charger ?', 'vs.canCarry': 'Peut transporter, par exemple', 'vs.choose': 'Choisir ce véhicule',
       'vs.order': 'Commander avec ce véhicule', 'vs.close': 'Fermer', 'vs.from': 'Dès {p}', 'vs.payload': 'Charge utile',
-      'vs.dims': 'Caisse', 'vs.prev': 'Véhicule précédent', 'vs.next': 'Véhicule suivant', 'vs.tap': 'Touchez le véhicule pour voir ce qui rentre',
+      'vs.dims': 'Caisse', 'ph.goods': 'Marchandises', 'ph.moving': 'Déménagement', 'vs.prev': 'Véhicule précédent', 'vs.next': 'Véhicule suivant', 'vs.tap': 'Touchez le véhicule pour voir ce qui rentre',
       'vs.note': "Capacités indicatives : elles varient selon le véhicule du chauffeur. Décrivez précisément vos objets à l'étape suivante.",
       'sum.tricycle': 'Petits colis, sacs et cageots, ou 1 à 2 objets moyens.',
       'sum.van1t': 'Studio ou déménagement partiel : 5 à 8 meubles et appareils.',
@@ -98,7 +98,7 @@
     en: {
       'vs.how': 'What fits?', 'vs.canCarry': 'Can carry, for example', 'vs.choose': 'Choose this vehicle',
       'vs.order': 'Book this vehicle', 'vs.close': 'Close', 'vs.from': 'From {p}', 'vs.payload': 'Payload',
-      'vs.dims': 'Cargo space', 'vs.prev': 'Previous vehicle', 'vs.next': 'Next vehicle', 'vs.tap': 'Tap the vehicle to see what fits',
+      'vs.dims': 'Cargo space', 'ph.goods': 'Goods', 'ph.moving': 'House move', 'vs.prev': 'Previous vehicle', 'vs.next': 'Next vehicle', 'vs.tap': 'Tap the vehicle to see what fits',
       'vs.note': "Indicative capacity: it depends on the driver's vehicle. Describe your items precisely in the next step.",
       'sum.tricycle': 'Small parcels, sacks and crates, or 1 to 2 medium items.',
       'sum.van1t': 'Studio or partial move: 5 to 8 pieces of furniture and appliances.',
@@ -131,7 +131,7 @@
   const wheel = (cx, cy, r) => `<circle class="v-tire" cx="${n1(cx)}" cy="${n1(cy)}" r="${r}"/><circle class="v-hub" cx="${n1(cx)}" cy="${n1(cy)}" r="${Math.round(r * 0.45)}"/>`;
 
   // Illustration du véhicule, caisse ouverte côté spectateur, avec chargement et cotes.
-  function art(id) {
+  function drawnArt(id) {
     const s = SPECS[id];
     const tri = !!s.open;
     const W = 400, yF = tri ? 150 : 166;
@@ -211,6 +211,54 @@
     return `<svg class="veh-art-svg" viewBox="0 0 ${W} 214" overflow="visible" role="img" aria-label="${t('veh.' + id)} · ${metres(s.l)} × ${metres(s.w)} × ${metres(s.h)}">${out.join('')}</svg>`;
   }
 
+  // Visuels fournis pour chaque véhicule ; à défaut, l'illustration dessinée.
+  const PHOTOS = {
+    tricycle: [{ src: 'assets/vehicles/tricycle.jpg', w: 1200, h: 591 }],
+    truck3t: [{ src: 'assets/vehicles/truck3t.jpg', w: 1200, h: 656 }],
+    truck10t: [
+      { src: 'assets/vehicles/truck10t-goods.jpg', w: 1200, h: 607, label: 'ph.goods' },
+      { src: 'assets/vehicles/truck10t-moving.jpg', w: 1200, h: 607, label: 'ph.moving' }
+    ]
+  };
+  const photoIndex = {};
+
+  function photoAlt(id, ph) {
+    const s = SPECS[id];
+    return `${t('veh.' + id)}${ph.label ? ' · ' + t(ph.label) : ''} · ${metres(s.l)} × ${metres(s.w)} × ${metres(s.h)}`;
+  }
+
+  function art(id) {
+    const list = PHOTOS[id];
+    if (!list) return drawnArt(id);
+    const ph = list[photoIndex[id] || 0];
+    return `<img class="veh-photo" src="${ph.src}" width="${ph.w}" height="${ph.h}" alt="${photoAlt(id, ph)}" decoding="async">`;
+  }
+
+  // Bascule entre plusieurs visuels d'un même véhicule (ex. 10T : marchandises / déménagement).
+  function photoSwitch(id) {
+    const list = PHOTOS[id];
+    if (!list || list.length < 2) return '';
+    const cur = photoIndex[id] || 0;
+    return `<div class="photo-switch" role="group">${list.map((ph, i) => `<button type="button" class="photo-chip${i === cur ? ' is-on' : ''}" aria-pressed="${i === cur}" data-photo-v="${id}" data-photo-i="${i}">${t(ph.label)}</button>`).join('')}</div>`;
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-photo-i]');
+    if (!b) return;
+    const id = b.dataset.photoV, i = +b.dataset.photoI, ph = PHOTOS[id][i];
+    photoIndex[id] = i;
+    const box = b.closest('.veh-stage, .sheet-art');
+    const img = box && box.querySelector('img.veh-photo');
+    if (img) { img.src = ph.src; img.alt = photoAlt(id, ph); }
+    b.parentElement.querySelectorAll('.photo-chip').forEach(c => {
+      const on = c === b;
+      c.classList.toggle('is-on', on);
+      c.setAttribute('aria-pressed', on);
+    });
+  });
+
+  const stageClass = id => PHOTOS[id] ? ' has-photo' : '';
+
   function tabs(selected, attr) {
     return `<div class="veh-tabs" role="tablist">${VEHICLES.map(v => `<button type="button" role="tab" class="veh-tab${v.id === selected ? ' is-on' : ''}" aria-selected="${v.id === selected}" ${attr}="${v.id}">${t('veh.' + v.id)}</button>`).join('')}</div>`;
   }
@@ -221,10 +269,11 @@
   }
 
   function stage(id, actAttr) {
-    return `<div class="veh-stage">
+    return `<div class="veh-stage${stageClass(id)}">
       <button type="button" class="veh-arrow veh-arrow-prev" ${actAttr}="prev" aria-label="${t('vs.prev')}">‹</button>
       <button type="button" class="veh-art" data-veh-open="${id}" aria-label="${t('vs.how')} ${t('veh.' + id)}">${art(id)}</button>
       <button type="button" class="veh-arrow veh-arrow-next" ${actAttr}="next" aria-label="${t('vs.next')}">›</button>
+      ${photoSwitch(id)}
       <p class="veh-dims mono">${dims(id)}</p>
     </div>`;
   }
@@ -248,7 +297,7 @@
         </div>
         <div class="sheet-body">
           ${tabs(id, 'data-sheet-v')}
-          <div class="sheet-art">${art(id)}<p class="veh-dims mono">${dims(id)}</p></div>
+          <div class="sheet-art${stageClass(id)}">${art(id)}${photoSwitch(id)}<p class="veh-dims mono">${dims(id)}</p></div>
           <section class="sheet-card">
             <h3>${t('vs.canCarry')} · <span class="accent">${t('veh.' + id)}</span></h3>
             <p class="sheet-sum">${t('sum.' + id)}</p>

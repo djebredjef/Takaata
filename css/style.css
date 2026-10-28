@@ -619,3 +619,11 @@ html.sheet-open { overflow: hidden; }
 .showcase-price { font: 600 16px var(--font-mono); color: var(--signal); }
 .item-grid-mini .item-card { background: var(--bg); min-height: 96px; }
 @media (max-width: 860px) { .showcase-grid { grid-template-columns: 1fr; } }
+
+/* visuels fournis (fond blanc) */
+.veh-photo { display: block; width: 100%; height: auto; border-radius: var(--r-sm); }
+.veh-stage.has-photo, .sheet-art.has-photo { background: #FFFFFF; border: 1px solid var(--line); }
+.has-photo .veh-dims { color: #557075; }
+.photo-switch { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.photo-chip { padding: 5px 12px; border-radius: 99px; border: 1.5px solid #C9D3D2; background: #FFFFFF; color: #3E555A; font: 600 13px var(--font-body); cursor: pointer; }
+.photo-chip.is-on { background: #0E2A33; border-color: #0E2A33; color: #FFFFFF; }
