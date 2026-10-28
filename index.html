@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Takaata</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Takaata : transport de marchandises à la demande à Abidjan. Déménagements, meubles, vivriers et colis volumineux, au prix négocié avec des chauffeurs vérifiés.">
+<meta name="theme-color" content="#0E2A33">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ================= SITE VITRINE ================= -->
+<div id="site">
+  <header class="topbar">
+    <div class="wrap topbar-in">
+      <a class="brand" href="#" aria-label="Takaata">
+        <span class="brand-mark" aria-hidden="true"></span><span class="brand-name">takaata</span>
+      </a>
+      <nav class="nav" aria-label="Navigation">
+        <a href="#comment" data-i18n="nav.how">Comment ça marche</a>
+        <a href="#vehicules" data-i18n="nav.vehicles">Véhicules et prix</a>
+        <a href="#chauffeurs" data-i18n="nav.drivers">Chauffeurs</a>
+        <a href="#entreprises" data-i18n="nav.business">Entreprises</a>
+        <a href="#faq" data-i18n="nav.faq">FAQ</a>
+      </nav>
+      <div class="topbar-actions">
+        <button class="lang-toggle" type="button" data-lang-toggle aria-label="Langue / Language">EN</button>
+        <a class="btn btn-signal btn-sm" href="#app" data-i18n="nav.open">Ouvrir l'app</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero : la promesse + un devis réel -->
+    <section class="hero">
+      <div class="wrap hero-in">
+        <div class="hero-copy">
+          <p class="eyebrow" data-i18n="hero.eyebrow">Transport de marchandises à la demande · Abidjan</p>
+          <h1 data-i18n="hero.title">Le bon véhicule, au prix que vous acceptez.</h1>
+          <p class="lead" data-i18n="hero.lead">Déménagement, meubles, vivriers, colis volumineux : publiez votre demande, recevez les offres de chauffeurs vérifiés et choisissez celle qui vous convient.</p>
+          <div class="hero-cta">
+            <a class="btn btn-signal" href="#app" data-i18n="hero.ctaClient">Commander un transport</a>
+            <a class="btn btn-ghost" href="#chauffeur" data-i18n="hero.ctaDriver">Devenir chauffeur partenaire</a>
+          </div>
+          <ul class="need-chips" aria-label="Besoins">
+            <li data-i18n="need.moving">Déménagement</li>
+            <li data-i18n="need.furniture">Meubles</li>
+            <li data-i18n="need.food">Vivriers</li>
+            <li data-i18n="need.shop">Approvisionnement de commerce</li>
+            <li data-i18n="need.parcel">Colis volumineux</li>
+          </ul>
+        </div>
+
+        <form class="waybill" id="quoteForm" aria-labelledby="quoteTitle">
+          <div class="waybill-head">
+            <span id="quoteTitle" data-i18n="quote.title">Bon de transport · estimation</span>
+            <span class="mono" id="quoteRef">TK-0000</span>
+          </div>
+          <div class="waybill-route">
+            <label class="field">
+              <span data-i18n="quote.from">Départ</span>
+              <select id="qFrom" data-communes></select>
+            </label>
+            <button class="swap" type="button" id="qSwap" aria-label="Inverser départ et arrivée">⇄</button>
+            <label class="field">
+              <span data-i18n="quote.to">Arrivée</span>
+              <select id="qTo" data-communes></select>
+            </label>
+          </div>
+          <fieldset class="vehicle-pick" id="qVehicles">
+            <legend data-i18n="quote.vehicle">Véhicule</legend>
+          </fieldset>
+          <div class="waybill-map" id="qMap" aria-hidden="true"></div>
+          <dl class="waybill-lines">
+            <div><dt data-i18n="quote.distance">Distance estimée</dt><dd class="mono" id="qKm">–</dd></div>
+            <div><dt data-i18n="quote.floor">Prix plancher</dt><dd class="mono" id="qFloor">–</dd></div>
+            <div class="total"><dt data-i18n="quote.reference">Prix de référence</dt><dd class="mono" id="qPrice">–</dd></div>
+          </dl>
+          <p class="waybill-note" data-i18n="quote.note">Hors options (manutention, étages, emballage). Vous proposez votre prix ; les chauffeurs acceptent ou font une contre-offre.</p>
+          <a class="btn btn-signal btn-block" href="#app" id="qGo" data-i18n="quote.go">Publier cette demande</a>
+        </form>
+      </div>
+    </section>
+
+    <!-- Comment ça marche : une vraie séquence -->
+    <section class="section" id="comment">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="how.eyebrow">Prix négocié, en quatre étapes</p>
+        <h2 data-i18n="how.title">Vous proposez, les chauffeurs répondent.</h2>
+        <ol class="steps">
+          <li>
+            <span class="step-n mono">1</span>
+            <h3 data-i18n="how.s1t">Publication</h3>
+            <p data-i18n="how.s1">Vous décrivez le trajet et le chargement. L'app suggère un prix de référence que vous pouvez ajuster.</p>
+          </li>
+          <li>
+            <span class="step-n mono">2</span>
+            <h3 data-i18n="how.s2t">Offres</h3>
+            <p data-i18n="how.s2">Les chauffeurs à proximité acceptent votre prix ou envoient une contre-offre, jamais sous le plancher.</p>
+          </li>
+          <li>
+            <span class="step-n mono">3</span>
+            <h3 data-i18n="how.s3t">Sélection</h3>
+            <p data-i18n="how.s3">Vous comparez prix, note du chauffeur et distance, puis vous choisissez.</p>
+          </li>
+          <li>
+            <span class="step-n mono">4</span>
+            <h3 data-i18n="how.s4t">Départ</h3>
+            <p data-i18n="how.s4">La course démarre une fois l'accord validé par les deux. Vous suivez chaque étape jusqu'à la livraison.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Véhicules et grille -->
+    <section class="section section-alt" id="vehicules">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="veh.eyebrow">Grille de référence du pilote</p>
+        <h2 data-i18n="veh.title">Quatre véhicules, une formule lisible.</h2>
+        <p class="formula mono" data-i18n="veh.formula">prix = max(plancher ; base + km × tarif) + options</p>
+        <div class="table-scroll">
+          <table class="grid-table">
+            <thead>
+              <tr>
+                <th data-i18n="veh.colVehicle">Véhicule</th>
+                <th data-i18n="veh.colLoad">Charge</th>
+                <th data-i18n="veh.colBase">Base</th>
+                <th data-i18n="veh.colKm">Par km</th>
+                <th data-i18n="veh.colFloor">Plancher</th>
+                <th data-i18n="veh.colUse">Usage typique</th>
+              </tr>
+            </thead>
+            <tbody id="vehicleRows"></tbody>
+          </table>
+        </div>
+        <p class="fine" data-i18n="veh.fine">Montants en FCFA. Ce sont les hypothèses de départ du pilote ; elles seront ajustées avec les chauffeurs.</p>
+      </div>
+    </section>
+
+    <!-- Règles claires -->
+    <section class="section" id="regles">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="rules.eyebrow">Tout est dit avant le départ</p>
+        <h2 data-i18n="rules.title">Des règles claires, pas de surprise à l'arrivée.</h2>
+        <div class="rules">
+          <article>
+            <h3 data-i18n="rules.r1t">Manutention et étages</h3>
+            <p data-i18n="rules.r1">Transport seul ou avec manutention. Vous déclarez objets, poids estimé, étages, ascenseur et nombre d'aides. Le prix détaillé est accepté avant le départ.</p>
+          </article>
+          <article>
+            <h3 data-i18n="rules.r2t">Attente</h3>
+            <p data-i18n="rules.r2">30 minutes cumulées de chargement et déchargement incluses. Les embouteillages ne sont pas facturés comme attente.</p>
+          </article>
+          <article>
+            <h3 data-i18n="rules.r3t">Annulation</h3>
+            <p data-i18n="rules.r3">Gratuite avant attribution, et pendant 5 minutes après si le chauffeur n'est pas parti. Une annulation due au chauffeur reste gratuite pour vous.</p>
+          </article>
+          <article>
+            <h3 data-i18n="rules.r4t">Photos et litiges</h3>
+            <p data-i18n="rules.r4">Photos au départ et à l'arrivée, réserves enregistrées, signalement dans l'app. Le support prend le dossier en charge sous un jour ouvré.</p>
+          </article>
+          <article>
+            <h3 data-i18n="rules.r5t">Paiement</h3>
+            <p data-i18n="rules.r5">Espèces au chauffeur, ou Mobile Money : Orange Money, Wave, MTN MoMo.</p>
+          </article>
+          <article>
+            <h3 data-i18n="rules.r6t">Changements</h3>
+            <p data-i18n="rules.r6">Nouvelle adresse ou volume en plus : un nouveau prix est accepté dans l'app avant exécution. Péages et stationnement remboursés sur justificatif.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chauffeurs -->
+    <section class="section section-ink" id="chauffeurs">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow" data-i18n="drv.eyebrow">Chauffeurs partenaires</p>
+          <h2 data-i18n="drv.title">Gardez 85 % de chaque course.</h2>
+          <ul class="ticks">
+            <li data-i18n="drv.b1">Commission unique de 15 %, affichée avant d'accepter.</li>
+            <li data-i18n="drv.b2">Des demandes qualifiées près de vous, avec le chargement décrit.</li>
+            <li data-i18n="drv.b3">Vous acceptez le prix du client ou vous faites votre contre-offre.</li>
+            <li data-i18n="drv.b4">Historique de vos courses et de votre solde, traitement des litiges.</li>
+            <li data-i18n="drv.b5">Formation gratuite à l'application dans votre commune.</li>
+          </ul>
+          <a class="btn btn-signal" href="#chauffeur" data-i18n="drv.cta">Ouvrir l'espace chauffeur</a>
+        </div>
+        <div class="ledger-demo" aria-label="Exemple de solde prépayé">
+          <p class="ledger-title" data-i18n="drv.exTitle">Solde prépayé : exemple d'une course payée en espèces</p>
+          <ol class="ledger-rows mono">
+            <li><span data-i18n="drv.ex1">Solde de départ</span><b>10 000</b></li>
+            <li><span data-i18n="drv.ex2">Course acceptée à 8 000 : réservation 15 %</span><b>− 1 200 <small data-i18n="drv.reserved">réservé</small></b></li>
+            <li><span data-i18n="drv.ex3">Le client paie 8 000 en espèces</span><b class="pos">+ 8 000 <small data-i18n="drv.inHand">en main</small></b></li>
+            <li><span data-i18n="drv.ex4">Livraison confirmée : commission débitée</span><b>− 1 200</b></li>
+            <li class="sum"><span data-i18n="drv.ex5">Nouveau solde</span><b>8 800</b></li>
+          </ol>
+          <p class="ledger-note" data-i18n="drv.exNote">Pas de commission si la course n'a pas lieu. En Mobile Money, Takaata retient la commission sur le paiement et vous reverse le net, sans toucher au solde.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Entreprises -->
+    <section class="section" id="entreprises">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow" data-i18n="biz.eyebrow">TPME, commerces, grossistes</p>
+          <h2 data-i18n="biz.title">Vos livraisons régulières, suivies au même endroit.</h2>
+          <ul class="ticks">
+            <li data-i18n="biz.b1">Tableau de bord pour commander et suivre toutes vos livraisons.</li>
+            <li data-i18n="biz.b2">Relevé mensuel des commandes et facturation selon contrat.</li>
+            <li data-i18n="biz.b3">Remises de volume étudiées avec vous pendant le pilote.</li>
+          </ul>
+        </div>
+        <form class="card form" id="bizForm">
+          <h3 data-i18n="biz.formTitle">Parlons de vos besoins</h3>
+          <label class="field"><span data-i18n="biz.company">Entreprise</span><input id="bizCompany" required autocomplete="organization"></label>
+          <label class="field"><span data-i18n="biz.phone">Téléphone</span><input id="bizPhone" required type="tel" inputmode="tel" placeholder="+225 07 00 00 00 00" autocomplete="tel"></label>
+          <label class="field"><span data-i18n="biz.volume">Courses par mois (estimation)</span>
+            <select id="bizVolume">
+              <option value="1-10">1 – 10</option>
+              <option value="10-50">10 – 50</option>
+              <option value="50+">50 +</option>
+            </select>
+          </label>
+          <button class="btn btn-signal btn-block" type="submit" data-i18n="biz.send">Envoyer</button>
+          <p class="form-status" id="bizStatus" role="status" hidden></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Zone pilote -->
+    <section class="section section-alt" id="zone">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="zone.eyebrow">Zone de lancement</p>
+        <h2 data-i18n="zone.title">Le Grand Abidjan, commune par commune.</h2>
+        <ul class="communes" id="communeList"></ul>
+        <p class="fine" data-i18n="zone.fine">Le pilote démarre sur une zone limitée, puis s'étend selon la qualité de service.</p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="wrap narrow">
+        <h2 data-i18n="faq.title">Questions fréquentes</h2>
+        <details><summary data-i18n="faq.q1">Comment le prix est-il fixé ?</summary><p data-i18n="faq.a1">L'app calcule un prix de référence selon le véhicule, la distance et vos options. Vous proposez votre prix, au-dessus du plancher. Les chauffeurs l'acceptent ou font une contre-offre, et vous choisissez.</p></details>
+        <details><summary data-i18n="faq.q2">Comment payer ?</summary><p data-i18n="faq.a2">En espèces au chauffeur, ou par Mobile Money (Orange Money, Wave, MTN MoMo), selon les moyens disponibles au lancement.</p></details>
+        <details><summary data-i18n="faq.q3">Mes biens sont-ils assurés ?</summary><p data-i18n="faq.a3">Chaque course est documentée par des photos au départ et à l'arrivée et une preuve de livraison. En cas de dommage, le support traite le dossier selon les responsabilités établies. Aucune assurance tous risques n'est annoncée tant qu'un assureur ne l'a pas confirmée par écrit.</p></details>
+        <details><summary data-i18n="faq.q4">Les chauffeurs sont-ils vérifiés ?</summary><p data-i18n="faq.a4">Oui : pièce d'identité et véhicule sont contrôlés à l'inscription. Chaque course est notée par le client.</p></details>
+        <details><summary data-i18n="faq.q5">Faut-il télécharger une application ?</summary><p data-i18n="faq.a5">Non. Takaata s'ouvre dans le navigateur et s'installe sur l'écran d'accueil de votre téléphone, comme une application.</p></details>
+      </div>
+    </section>
+
+    <!-- Installer -->
+    <section class="install-band">
+      <div class="wrap install-in">
+        <div>
+          <h2 data-i18n="inst.title">Takaata dans votre poche.</h2>
+          <p data-i18n="inst.lead">Ajoutez l'application à votre écran d'accueil : commande, suivi et historique en un geste.</p>
+        </div>
+        <div class="install-actions">
+          <button class="btn btn-signal" type="button" data-install hidden data-i18n="inst.btn">Installer l'application</button>
+          <a class="btn btn-ghost-light" href="#app" data-i18n="inst.open">Ouvrir l'app</a>
+          <p class="install-hint" data-i18n="inst.hint">Sur iPhone : bouton Partager, puis « Sur l'écran d'accueil ».</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-in">
+      <div>
+        <a class="brand" href="#"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">takaata</span></a>
+        <p data-i18n="foot.tag">Transport de marchandises à la demande à Abidjan.</p>
+      </div>
+      <p class="fine" data-i18n="foot.note">Prototype de lancement. Tarifs et règles en cours de validation pendant le pilote.</p>
+    </div>
+  </footer>
+</div>
+
+<!-- ================= APPLICATION (PWA) ================= -->
+<div id="app" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="js/data.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/site.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
