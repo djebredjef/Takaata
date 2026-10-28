@@ -335,8 +335,14 @@
     document.querySelectorAll('[data-lang-toggle]').forEach(b => { b.textContent = lang === 'fr' ? 'EN' : 'FR'; });
   }
 
+  // Permet à un module d'ajouter ses propres textes.
+  function addStrings(more) {
+    Object.assign(fr, more.fr);
+    Object.assign(en, more.en);
+  }
+
   window.TK = Object.assign(window.TK || {}, {
-    t, applyStatic,
+    t, applyStatic, addStrings,
     getLang: () => lang,
     setLang: l => { lang = dict[l] ? l : 'fr'; }
   });

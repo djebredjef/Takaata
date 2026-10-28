@@ -97,25 +97,34 @@
     }
 
     if (step === 2) {
-      body = `<div class="veh-list">${VEHICLES.map(v => {
-        const vq = quote(v.id, kmVal, d);
-        return `<label class="veh-card${d.vehicle === v.id ? ' is-on' : ''}">
-          <input type="radio" name="vehicle" id="w-veh-${v.id}" value="${v.id}" data-bind="vehicle"${d.vehicle === v.id ? ' checked' : ''}>
-          <span class="veh-ic veh-${v.id}" aria-hidden="true"></span>
-          <span class="veh-txt"><b>${esc(t('veh.' + v.id))}</b><small>${v.load} · ${esc(t('use.' + v.id))}</small></span>
-          <span class="veh-price mono">${fcfa(vq.transport)}</span>
+      // Présentation façon « choix du véhicule » : onglets, caisse chargée, formules de service.
+      const V = TK.vehicles;
+      const prices = {
+        handling: quote(d.vehicle, kmVal, { service: 'handling', helpers: 1 }).reference,
+        transport: quote(d.vehicle, kmVal, { service: 'transport' }).reference
+      };
+      const svc = kind => `
+        <label class="svc-card${d.service === kind ? ' is-on' : ''}">
+          <input type="radio" name="service" id="w-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
+          <span class="svc-check" aria-hidden="true"></span>
+          <span class="svc-txt"><b>${esc(t('svc.' + kind))}</b><small>${esc(t('svc.' + kind + 'D'))}</small></span>
+          <span class="svc-price"><b class="mono">${fmt(prices[kind])}</b><small>FCFA · ${esc(t('svc.from'))}</small></span>
         </label>`;
-      }).join('')}</div>
-      <p class="hint">${esc(t('quote.distance'))} : <span class="mono">${ui.km(kmVal)}</span></p>`;
+      body = `
+        ${V.tabs(d.vehicle, 'data-veh-tab')}
+        ${V.stage(d.vehicle, 'data-veh-step')}
+        <div class="veh-sum">
+          <p>${esc(t('sum.' + d.vehicle))}</p>
+          <button type="button" class="link-btn veh-how" data-veh-open="${d.vehicle}">${esc(t('vs.how'))} ›</button>
+        </div>
+        <fieldset class="svc-list"><legend class="sr-only">${esc(t('w.service'))}</legend>${svc('handling')}${svc('transport')}</fieldset>
+        <p class="hint">${esc(t('quote.distance'))} : <span class="mono">${ui.km(kmVal)}</span> · ${esc(t('vs.tap'))}</p>`;
     }
 
     if (step === 3) {
       const handling = d.service === 'handling';
       body = `
-        <fieldset class="chips"><legend>${esc(t('w.service'))}</legend>
-          <label class="chip-radio"><input type="radio" name="service" id="w-svc-t" value="transport" data-bind="service"${!handling ? ' checked' : ''}><span>${esc(t('w.transportOnly'))}</span></label>
-          <label class="chip-radio"><input type="radio" name="service" id="w-svc-h" value="handling" data-bind="service"${handling ? ' checked' : ''}><span>${esc(t('w.handling'))}</span></label>
-        </fieldset>
+        <p class="notice">${esc(t('veh.' + d.vehicle))} · ${esc(t(handling ? 'svc.handling' : 'svc.transport'))}</p>
         <label class="field"><span>${esc(t('w.items'))}</span><textarea id="w-items" rows="3" data-bind="items" placeholder="${esc(t('w.itemsPh'))}">${esc(d.items)}</textarea></label>
         <p class="field-error" id="w-items-err" hidden>${esc(t('w.itemsRequired'))}</p>
         <label class="field"><span>${esc(t('w.weight'))}</span><input id="w-weight" data-bind="weight" value="${esc(d.weight)}" placeholder="ex. 150 kg"></label>
@@ -506,6 +515,7 @@
       if (el && !el.dataset.bind) el.value = v;
     });
     if (focused) { const el = document.getElementById(focused); if (el) el.focus({ preventScroll: true }); }
+    TK.vehicles.centerTabs(root);
   }
 
   function go(name, patch) {
@@ -515,7 +525,20 @@
   }
 
   // ---------- événements ----------
+  function setVehicle(id) {
+    view.draft.vehicle = id;
+    render();
+  }
+
   root.addEventListener('click', e => {
+    if (view.name === 'wizard' && view.draft) {
+      const vt = e.target.closest('[data-veh-tab]');
+      if (vt) { setVehicle(vt.dataset.vehTab); return; }
+      const vs = e.target.closest('[data-veh-step]');
+      if (vs) { setVehicle(TK.vehicles.step(view.draft.vehicle, vs.dataset.vehStep)); return; }
+      const vo = e.target.closest('[data-veh-open]');
+      if (vo) { TK.vehicles.openSheet(vo.dataset.vehOpen, { onChoose: setVehicle }); return; }
+    }
     const b = e.target.closest('[data-act]');
     if (!b || b.disabled || b.tagName === 'INPUT') return;
     const id = b.dataset.id;
@@ -590,6 +613,9 @@
     view.draft[f] = v;
     return true;
   }
+
+  // Glisser sur l'illustration pour changer de véhicule.
+  TK.vehicles.swipe(root, dir => { if (view.name === 'wizard' && view.draft) setVehicle(TK.vehicles.step(view.draft.vehicle, dir)); });
 
   root.addEventListener('input', e => {
     if (e.target.matches('input[type=text], input:not([type]), textarea, input[type=number], input[type=datetime-local]')) bindValue(e.target);

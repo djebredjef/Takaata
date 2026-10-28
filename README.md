@@ -6,7 +6,7 @@ Site web et application (PWA installable) de **Takaata**, plateforme de transpor
 
 - **Site vitrine** (`index.html`) : présentation, estimateur de prix, grille des véhicules, règles, chauffeurs, entreprises, FAQ. Bilingue FR / EN.
 - **Application** (même page, routes `#app`, `#chauffeur`, `#admin`) :
-  - **Client** : commande en 4 étapes (trajet, véhicule, chargement, prix et paiement), offres et contre-offres des chauffeurs, suivi, photos, signalement, confirmation de livraison, note et reçu.
+  - **Client** : commande en 4 étapes (trajet, véhicule illustré avec ce qu'il peut contenir, chargement, prix et paiement), offres et contre-offres des chauffeurs, suivi, photos, signalement, confirmation de livraison, note et reçu.
   - **Chauffeur** : solde prépayé (solde, réservé, disponible), recharges, demandes à proximité, accepter ou contre-proposer, réservation de 15 % avant attribution, débit unique à la livraison (espèces) ou reversement net (Mobile Money).
   - **Admin** : indicateurs, liste des courses, rapprochement du solde chauffeur, signalements.
 
@@ -37,8 +37,10 @@ js/data.js            véhicules, communes, calcul des prix
 js/i18n.js            traductions FR / EN
 js/store.js           commandes, offres, solde prépayé (logique métier)
 js/ui.js              utilitaires d'affichage, carte schématique
+js/vehicles.js        choix du véhicule : caisse chargée, cotes, « Que peut-on charger ? »
 js/site.js            site vitrine
 js/app.js             application client / chauffeur / admin
+
 manifest.webmanifest  installation PWA
 sw.js                 fonctionnement hors ligne
 tools/build_preview.py  génère dist/preview.html pour un aperçu hébergé
