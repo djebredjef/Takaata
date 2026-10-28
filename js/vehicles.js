@@ -6,7 +6,7 @@
   // Caisse en mètres (l = longueur, w = largeur, h = hauteur ; ridelles pour le tricycle).
   const SPECS = {
     tricycle: {
-      l: 1.6, w: 1.2, h: 0.4, payload: '400 kg', open: true,
+      l: 1.6, w: 1.2, h: 0.4, payloadKg: 400, payload: '400 kg', open: true,
       items: [['box', '≤ 10'], ['sack', '≤ 12'], ['crate', '≤ 8'], ['drinks', '≤ 10'], ['gas', '≤ 6'], ['tv', '≤ 55"'], ['fan', ''], ['chairs', '≤ 20'], ['washer', '1']],
       scene: [
         { k: 'box', x: 0.03, w: 0.26, row: 'b' }, { k: 'box', x: 0.03, w: 0.26, stack: 1, row: 'b' },
@@ -16,7 +16,7 @@
       ]
     },
     van1t: {
-      l: 2.6, w: 1.6, h: 1.5, payload: '1 t', cab: 'van',
+      l: 2.6, w: 1.6, h: 1.5, payloadKg: 1000, payload: '1 t', cab: 'van',
       items: [['mattress', '≤ 160 cm'], ['bed', '≤ 160 cm'], ['fridge', '≤ 350 L'], ['washer', ''], ['sofa', '2 pl.'], ['tv', ''], ['box', '≤ 25'], ['sack', '≤ 40'], ['moto', '1']],
       scene: [
         { k: 'mattress', x: 0.06, w: 0.4, row: 'b' }, { k: 'fridge', x: 0.72, w: 0.28, row: 'b' },
@@ -26,7 +26,7 @@
       ]
     },
     truck3t: {
-      l: 4.2, w: 2.0, h: 2.0, payload: '3 t', cab: 'truck',
+      l: 4.2, w: 2.0, h: 2.0, payloadKg: 3000, payload: '3 t', cab: 'truck',
       items: [['wardrobe', '3 portes'], ['bed', '≤ 180 cm × 2'], ['mattress', '× 2'], ['sofa', '3 pl. + 2'], ['fridge', ''], ['freezer', ''], ['washer', ''], ['table', '+ 6'], ['box', '≤ 60'], ['sack', '≤ 120'], ['moto', '≤ 3']],
       scene: [
         { k: 'wardrobe', x: 0.02, w: 0.22, row: 'b' }, { k: 'mattress', x: 0.26, w: 0.26, row: 'b' },
@@ -38,7 +38,7 @@
       ]
     },
     truck10t: {
-      l: 6.8, w: 2.4, h: 2.4, payload: '10 t', cab: 'truck', axles: 2,
+      l: 6.8, w: 2.4, h: 2.4, payloadKg: 10000, payload: '10 t', cab: 'truck', axles: 2,
       items: [['sack', '≤ 400'], ['cement', '≤ 200'], ['rebar', '≤ 6 m'], ['pallet', '≤ 12'], ['drinks', '≤ 300'], ['crate', '≤ 300'], ['wardrobe', ''], ['sofa', ''], ['fridge', ''], ['moto', '≤ 8']],
       scene: [
         { k: 'cement', x: 0.02, w: 0.18, row: 'b' }, { k: 'cement', x: 0.02, w: 0.18, stack: 1, row: 'b' },
@@ -51,6 +51,15 @@
       ]
     }
   };
+
+  // Poids moyen par objet (kg), pour estimer le chargement à partir de ce que le client coche.
+  const WEIGHTS = {
+    box: 15, sack: 25, crate: 20, mattress: 25, bed: 50, fridge: 70, freezer: 60, washer: 70, sofa: 60,
+    armchair: 25, tv: 15, wardrobe: 80, table: 40, chairs: 3, fan: 5, gas: 25, moto: 110, pallet: 25,
+    cement: 50, rebar: 6, drinks: 15
+  };
+  // Objets proposés dans la liste de la commande (les plus courants d'abord).
+  const PICK = ['box', 'sack', 'mattress', 'bed', 'fridge', 'washer', 'sofa', 'armchair', 'tv', 'wardrobe', 'table', 'chairs', 'freezer', 'fan', 'gas', 'crate', 'drinks', 'moto', 'cement', 'rebar', 'pallet'];
 
   // Icônes d'objets : [largeur, hauteur] du viewBox + dessin. Couleurs fixes, lisibles sur les deux thèmes.
   const ICONS = {
@@ -378,6 +387,6 @@
   }
 
   window.TK = Object.assign(window.TK || {}, {
-    vehicles: { SPECS, art, icon, tabs, stage, dims, step, openSheet, closeSheet, centerTabs, swipe }
+    vehicles: { SPECS, WEIGHTS, PICK, art, icon, tabs, stage, dims, step, openSheet, closeSheet, centerTabs, swipe }
   });
 })();

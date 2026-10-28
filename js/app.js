@@ -20,9 +20,9 @@
 
   function newDraft(patch) {
     return Object.assign({
-      need: 'moving', from: 'yopougon', to: 'cocody', fromDetail: '', toDetail: '', when: 'now', whenAt: '',
-      vehicle: 'truck3t', service: 'transport', items: '', weight: '', floorsFrom: 0, floorsTo: 0,
-      elevator: false, helpers: 1, packing: false, dismantle: false, price: null, payment: 'cash'
+      need: 'moving', from: 'yopougon', to: '', fromDetail: '', toDetail: '', when: 'now', whenAt: '',
+      vehicle: 'truck3t', service: 'transport', items: '', notes: '', itemsQty: {}, weightManual: '', weight: '',
+      floorsFrom: 0, floorsTo: 0, elevator: false, helpers: 1, packing: false, dismantle: false, price: null, payment: 'cash'
     }, patch);
   }
   function draftQuote(d) { return quote(d.vehicle, distanceKm(d.from, d.to), d); }
@@ -41,63 +41,84 @@
   }
 
   // ---------- CLIENT ----------
-  const helperOpts = { service: 'handling', helpers: 1 };
+  const V = () => TK.vehicles;
   function servicePrices(d, kmVal) {
     return {
-      handling: quote(d.vehicle, kmVal, helperOpts).reference,
+      handling: quote(d.vehicle, kmVal, { service: 'handling', helpers: Math.max(1, d.helpers || 1), floorsFrom: d.floorsFrom, floorsTo: d.floorsTo, elevator: d.elevator }).reference,
       transport: quote(d.vehicle, kmVal, { service: 'transport' }).reference
     };
   }
+  const code = id => commune(id).name.normalize('NFD').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
 
-  // Accueil façon « choix du véhicule » : besoin, véhicule, adresses, puis prix sans aide / avec aide.
+  // Poids estimé à partir des objets cochés (le client peut le corriger).
+  function estimatedKg(d) {
+    const W = V().WEIGHTS;
+    return Object.entries(d.itemsQty || {}).reduce((a, [k, n]) => a + (W[k] || 0) * n, 0);
+  }
+  function loadKg(d) { return d.weightManual ? Number(d.weightManual) || 0 : estimatedKg(d); }
+  function itemsSummary(d) {
+    const list = Object.entries(d.itemsQty || {}).filter(([, n]) => n > 0).map(([k, n]) => `${n} × ${t('it.' + k)}`);
+    if (d.notes && d.notes.trim()) list.push(d.notes.trim());
+    return list.join(', ');
+  }
+
+  // Départ : position du téléphone → commune la plus proche.
+  function locate() {
+    const d = view.draft;
+    if (!navigator.geolocation) { d.loc = 'off'; render(); return; }
+    d.loc = 'busy';
+    try {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const c = TK.nearestCommune(pos.coords.latitude, pos.coords.longitude);
+        if (c) { d.from = c.id; d.fromLat = pos.coords.latitude; d.fromLon = pos.coords.longitude; d.loc = 'ok'; } else d.loc = 'out';
+        render();
+      }, () => { d.loc = 'off'; render(); }, { timeout: 10000, maximumAge: 300000 });
+    } catch (e) { d.loc = 'off'; }
+  }
+
+  // Accueil : besoin, véhicule, départ (localisé) et arrivée. Choisir l'arrivée ouvre la page suivante.
   function clientHome() {
     const d = view.draft || (view.draft = newDraft());
-    const kmVal = distanceKm(d.from, d.to);
-    const V = TK.vehicles;
-    const prices = servicePrices(d, kmVal);
+    if (!d.loc) setTimeout(locate, 0);
     const active = store.state.orders.filter(o => o.owner === 'me' && ACTIVE.includes(o.status));
-    const svc = kind => `
-      <label class="svc-card${d.service === kind ? ' is-on' : ''}">
-        <input type="radio" name="service" id="h-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
-        <span class="svc-check" aria-hidden="true"></span>
-        <span class="svc-txt"><b>${esc(t('svc.' + kind))}</b><small>${esc(t('svc.' + kind + 'D'))}</small></span>
-        <span class="svc-price"><b class="mono">${fmt(prices[kind])}</b><small>FCFA · ${esc(t('svc.from'))}</small></span>
-      </label>`;
-    const addr = (side, dot) => `
-      <div class="addr-row">
-        <span class="addr-dot addr-dot-${dot}" aria-hidden="true"></span>
-        <div class="addr-fields">
-          <label class="addr-label" for="h-${side}">${esc(t(side === 'from' ? 'quote.from' : 'quote.to'))}</label>
-          <select id="h-${side}" data-bind="${side}">${ui.communeOptions(d[side])}</select>
-          <input id="h-${side}Detail" data-bind="${side}Detail" value="${esc(d[side + 'Detail'])}" placeholder="${esc(t('w.detailPh'))}" aria-label="${esc(t(side === 'from' ? 'w.fromDetail' : 'w.toDetail'))}">
-        </div>
-      </div>`;
+    const locLabel = { busy: 'loc.busy', ok: 'loc.ok', off: 'loc.off', out: 'loc.out', manual: 'quote.from' }[d.loc] || 'loc.busy';
     return `
       ${active.length ? `<section class="home-active"><h2 class="app-h">${esc(t('c.active'))}</h2><div class="stack">${active.map(orderRow).join('')}</div></section>` : ''}
-      <form class="home" id="homeForm" novalidate>
+      <div class="home">
         <div class="need-row" role="radiogroup" aria-label="${esc(t('c.hello'))}">
           ${NEEDS.map(n => `<label class="need-chip"><input type="radio" name="need" id="h-need-${n}" value="${n}" data-bind="need"${d.need === n ? ' checked' : ''}><span><i class="need-ic need-${n}" aria-hidden="true"></i>${esc(t('need.' + n))}</span></label>`).join('')}
         </div>
         <section class="home-veh">
-          ${V.tabs(d.vehicle, 'data-veh-tab')}
-          ${V.stage(d.vehicle, 'data-veh-step')}
+          ${V().tabs(d.vehicle, 'data-veh-tab')}
+          ${V().stage(d.vehicle, 'data-veh-step')}
           <div class="veh-sum">
             <p>${esc(t('sum.' + d.vehicle))}</p>
             <button type="button" class="link-btn veh-how" data-veh-open="${d.vehicle}">${esc(t('vs.how'))} ›</button>
           </div>
         </section>
         <section class="addr-card">
-          ${addr('from', 'from')}
-          <button type="button" class="addr-swap" data-act="swap" aria-label="${esc(t('w.swap'))}">⇅</button>
-          ${addr('to', 'to')}
-          <p class="addr-km">${esc(t('quote.distance'))} <b class="mono">${ui.km(kmVal)}</b></p>
+          <div class="addr-row">
+            <span class="addr-dot addr-dot-from" aria-hidden="true"></span>
+            <div class="addr-fields">
+              <label class="addr-label${d.loc === 'off' || d.loc === 'out' ? ' is-warn' : ''}" for="h-from">${esc(t(locLabel))}</label>
+              <select id="h-from" data-bind="from">${ui.communeOptions(d.from)}</select>
+            </div>
+            <button type="button" class="addr-locate${d.loc === 'busy' ? ' is-busy' : ''}" data-act="locate" aria-label="${esc(t('loc.btn'))}" title="${esc(t('loc.btn'))}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+            </button>
+          </div>
+          <div class="addr-row addr-row-to">
+            <span class="addr-dot addr-dot-to" aria-hidden="true"></span>
+            <div class="addr-fields">
+              <label class="addr-label" for="h-to">${esc(t('quote.to'))}</label>
+              <select id="h-to" data-bind="to" class="${d.to ? '' : 'is-empty'}">
+                <option value=""${d.to ? '' : ' selected'}>${esc(t('h.where'))}</option>${ui.communeOptions(d.to)}
+              </select>
+            </div>
+          </div>
         </section>
-        <fieldset class="svc-list"><legend class="sr-only">${esc(t('w.service'))}</legend>${svc('transport')}${svc('handling')}</fieldset>
-        <p class="hint">${esc(t('h.priceHint'))}</p>
-        <div class="wiz-actions home-actions">
-          <button class="btn btn-signal btn-block" type="submit">${esc(t('w.next'))} · ${fcfa(prices[d.service] || prices.transport)}</button>
-        </div>
-      </form>`;
+        <p class="hint">${esc(t('h.hint'))}</p>
+      </div>`;
   }
 
   function ordersView() {
@@ -129,7 +150,22 @@
     </button>`;
   }
 
-  // Suite de la commande après l'accueil : 3 = chargement, 4 = prix et paiement.
+  function tripSummary(d, kmVal) {
+    return `<div class="trip-sum">
+      <div class="trip-route">
+        <span class="addr-dot addr-dot-from" aria-hidden="true"></span><b>${esc(commune(d.from).name)}</b>
+        <span class="trip-arrow" aria-hidden="true">→</span>
+        <span class="addr-dot addr-dot-to" aria-hidden="true"></span><b>${esc(commune(d.to).name)}</b>
+      </div>
+      <div class="trip-meta">
+        <span class="trip-veh">${esc(t('veh.' + d.vehicle))}</span>
+        <span class="mono">${ui.km(kmVal)}</span>
+        <button type="button" class="link-btn" data-act="home">${esc(t('w.edit'))}</button>
+      </div>
+    </div>`;
+  }
+
+  // Suite de la commande : 3 = détails (aide, objets), 4 = prix et paiement.
   function wizard() {
     const d = view.draft, step = view.step;
     const q = draftQuote(d);
@@ -139,35 +175,100 @@
 
     if (step === 3) {
       const handling = d.service === 'handling';
+      const prices = servicePrices(d, kmVal);
+      const spec = V().SPECS[d.vehicle];
+      const est = estimatedKg(d), kg = loadKg(d);
+      const over = kg > spec.payloadKg;
+      const bigger = VEHICLES.find(v => V().SPECS[v.id].payloadKg >= kg);
+      const svc = kind => `
+        <label class="svc-card${d.service === kind ? ' is-on' : ''}">
+          <input type="radio" name="service" id="w-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
+          <span class="svc-check" aria-hidden="true"></span>
+          <span class="svc-txt"><b>${esc(t('svc.' + kind))}</b><small>${esc(t('svc.' + kind + 'D'))}</small></span>
+          <span class="svc-price"><b class="mono">${fmt(prices[kind])}</b><small>FCFA · ${esc(t('svc.from'))}</small></span>
+        </label>`;
+      const keys = V().PICK.filter(k => spec.items.some(([key]) => key === k) || (d.itemsQty[k] || 0) > 0);
+      const rest = V().PICK.filter(k => !keys.includes(k));
+      const pick = k => {
+        const n = d.itemsQty[k] || 0;
+        return `<li class="pick${n ? ' is-on' : ''}">
+          <span class="pick-ic">${V().icon(k)}</span>
+          <span class="pick-name">${esc(t('it.' + k))}</span>
+          <span class="pick-ctr">
+            <button type="button" data-act="item" data-k="${k}" data-d="-1" aria-label="− ${esc(t('it.' + k))}"${n ? '' : ' disabled'}>−</button>
+            <b class="mono" aria-live="polite">${n}</b>
+            <button type="button" data-act="item" data-k="${k}" data-d="1" aria-label="+ ${esc(t('it.' + k))}">+</button>
+          </span></li>`;
+      };
       body = `
-        <p class="notice">${route(d)} · ${esc(t('veh.' + d.vehicle))} · ${esc(t(handling ? 'svc.handling' : 'svc.transport'))}</p>
-        <label class="field"><span>${esc(t('w.items'))}</span><textarea id="w-items" rows="3" data-bind="items" placeholder="${esc(t('w.itemsPh'))}">${esc(d.items)}</textarea></label>
-        <p class="field-error" id="w-items-err" hidden>${esc(t('w.itemsRequired'))}</p>
-        <label class="field"><span>${esc(t('w.weight'))}</span><input id="w-weight" data-bind="weight" value="${esc(d.weight)}" placeholder="ex. 150 kg"></label>
-        ${handling ? `
-        <div class="row-3">
-          ${counter('helpers', t('w.helpers'), d.helpers, 1, 6)}
-          ${counter('floorsFrom', t('w.floorsFrom'), d.floorsFrom, 0, 20)}
-          ${counter('floorsTo', t('w.floorsTo'), d.floorsTo, 0, 20)}
+        ${tripSummary(d, kmVal)}
+        <div class="row-2">
+          <label class="field"><span>${esc(t('w.fromDetail'))}</span><input id="w-fromDetail" data-bind="fromDetail" value="${esc(d.fromDetail)}" placeholder="${esc(t('w.detailPh'))}"></label>
+          <label class="field"><span>${esc(t('w.toDetail'))}</span><input id="w-toDetail" data-bind="toDetail" value="${esc(d.toDetail)}" placeholder="${esc(t('w.detailPh'))}"></label>
         </div>
-        <label class="check"><input type="checkbox" id="w-elevator" data-bind="elevator"${d.elevator ? ' checked' : ''}><span>${esc(t('w.elevator'))}</span></label>
-        <p class="hint">${esc(t('w.perHelper', { p: fcfa(TK.OPTIONS.helper) }))} · ${esc(t('w.perFloor', { p: fcfa(TK.OPTIONS.floor) }))}</p>` : ''}
-        <label class="check"><input type="checkbox" id="w-packing" data-bind="packing"${d.packing ? ' checked' : ''}><span>${esc(t('w.packing'))} <small class="mono">+${fmt(TK.OPTIONS.packing)}</small></span></label>
-        <label class="check"><input type="checkbox" id="w-dismantle" data-bind="dismantle"${d.dismantle ? ' checked' : ''}><span>${esc(t('w.dismantle'))} <small class="mono">+${fmt(TK.OPTIONS.dismantle)}</small></span></label>`;
+
+        <fieldset class="svc-list"><legend class="app-h">${esc(t('w.service'))}</legend>${svc('transport')}${svc('handling')}</fieldset>
+        ${handling ? `
+        <div class="reveal">
+          <div class="row-3">
+            ${counter('helpers', t('w.helpers'), d.helpers, 1, 6)}
+            ${counter('floorsFrom', t('w.floorsFrom'), d.floorsFrom, 0, 20)}
+            ${counter('floorsTo', t('w.floorsTo'), d.floorsTo, 0, 20)}
+          </div>
+          <label class="check"><input type="checkbox" id="w-elevator" data-bind="elevator"${d.elevator ? ' checked' : ''}><span>${esc(t('w.elevator'))}</span></label>
+          <p class="hint">${esc(t('w.perHelper', { p: fcfa(TK.OPTIONS.helper) }))} · ${esc(t('w.perFloor', { p: fcfa(TK.OPTIONS.floor) }))}</p>
+        </div>` : ''}
+
+        <section class="items-pick">
+          <h2 class="app-h">${esc(t('w.items'))} <small>${esc(t('w.optional'))}</small></h2>
+          <ul class="pick-grid">${keys.map(pick).join('')}</ul>
+          ${rest.length ? (view.moreItems
+            ? `<ul class="pick-grid">${rest.map(pick).join('')}</ul>`
+            : `<button type="button" class="link-btn" data-act="more-items">+ ${esc(t('w.moreItems'))}</button>`) : ''}
+          <label class="field"><span>${esc(t('w.notes'))}</span><textarea id="w-notes" rows="2" data-bind="notes" placeholder="${esc(t('w.itemsPh'))}">${esc(d.notes)}</textarea></label>
+        </section>
+
+        <div class="weight-box${over ? ' is-over' : ''}">
+          <div class="weight-top">
+            <span>${esc(t('w.weight'))}</span>
+            <b class="mono">${kg ? `≈ ${fmt(kg)} kg` : '—'}</b>
+          </div>
+          <div class="weight-bar" aria-hidden="true"><i style="width:${Math.min(100, Math.round(kg / spec.payloadKg * 100))}%"></i></div>
+          <p class="hint">${esc(est ? t('w.weightCalc', { p: spec.payload }) : t('w.weightEmpty'))}</p>
+          ${over ? `<p class="field-error">${esc(t('w.tooHeavy', { p: spec.payload }))}</p>
+            ${bigger ? `<button type="button" class="btn btn-ghost btn-sm" data-act="upsize" data-v="${bigger.id}">${esc(t('w.switchTo', { v: t('veh.' + bigger.id) }))}</button>` : ''}` : ''}
+          <label class="field field-inline"><span>${esc(t('w.weightFix'))}</span>
+            <input id="w-weightManual" type="number" inputmode="numeric" min="0" step="10" data-bind="weightManual" value="${esc(d.weightManual || '')}" placeholder="kg" class="weight-input">
+          </label>
+        </div>`;
     }
 
     if (step === 4) {
       if (d.price == null || d.price < q.minimum) d.price = q.reference;
+      const kg = loadKg(d);
       body = `
-        <div class="waybill waybill-app">
-          <div class="waybill-head"><span>${route(d)}</span><span class="mono">${ui.km(kmVal)}</span></div>
-          <dl class="waybill-lines">
-            <div><dt>${esc(t('w.transport'))} · ${esc(t('veh.' + d.vehicle))}</dt><dd class="mono">${fcfa(q.transport)}</dd></div>
+        <article class="ticket" aria-label="${esc(t('tk.title'))}">
+          <div class="ticket-band"><span class="brand-name">takaata</span><span class="mono">${esc(t('tk.title'))}</span></div>
+          <div class="ticket-main">
+            <div class="ticket-route">
+              <div><small>${esc(t('quote.from'))}</small><b class="ticket-code">${code(d.from)}</b><span>${esc(commune(d.from).name)}</span></div>
+              <div class="ticket-line" aria-hidden="true"><i></i><span class="mono">${ui.km(kmVal)}</span></div>
+              <div class="ta-r"><small>${esc(t('quote.to'))}</small><b class="ticket-code">${code(d.to)}</b><span>${esc(commune(d.to).name)}</span></div>
+            </div>
+            <dl class="ticket-meta">
+              <div><dt>${esc(t('quote.vehicle'))}</dt><dd>${esc(t('veh.' + d.vehicle))}</dd></div>
+              <div><dt>${esc(t('w.service'))}</dt><dd>${esc(t(d.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${d.service === 'handling' ? ` · ${d.helpers}` : ''}</dd></div>
+              <div><dt>${esc(t('w.weight'))}</dt><dd class="mono">${kg ? `≈ ${fmt(kg)} kg` : '—'}</dd></div>
+            </dl>
+          </div>
+          <div class="ticket-tear" aria-hidden="true"></div>
+          <dl class="ticket-prices">
+            <div><dt>${esc(t('w.transport'))}</dt><dd class="mono">${fcfa(q.transport)}</dd></div>
             <div><dt>${esc(t('w.options'))}</dt><dd class="mono">${fcfa(q.options)}</dd></div>
             <div class="total"><dt>${esc(t('w.reference'))}</dt><dd class="mono">${fcfa(q.reference)}</dd></div>
-            <div><dt>${esc(t('w.minimum'))}</dt><dd class="mono">${fcfa(q.minimum)}</dd></div>
+            <div class="min"><dt>${esc(t('w.minimum'))}</dt><dd class="mono">${fcfa(q.minimum)}</dd></div>
           </dl>
-        </div>
+        </article>
         <div class="price-box">
           <span class="label">${esc(t('w.yourPrice'))}</span>
           <div class="stepper">
@@ -175,6 +276,7 @@
             <label class="price-input"><input id="w-price" type="number" inputmode="numeric" step="100" min="${q.minimum}" value="${d.price}" data-bind="price"><span>FCFA</span></label>
             <button type="button" class="step-btn" data-act="price" data-d="500" aria-label="+500">+</button>
           </div>
+          <p class="hint">${esc(t('w.negotiate', { min: fcfa(q.minimum) }))}</p>
           <p class="field-error" id="w-price-err" hidden>${esc(t('w.belowMin', { min: fcfa(q.minimum) }))}</p>
         </div>
         <fieldset class="chips"><legend>${esc(t('w.when'))}</legend>
@@ -198,7 +300,7 @@
         <h1 class="app-title">${esc(t(titles[step]))}</h1>
         <form class="wiz-form" id="wizForm" novalidate>${body}
           <div class="wiz-actions">
-            <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? 'w.publish' : 'w.next'))}${step === 4 ? ` · ${fcfa(d.price)}` : ''}</button>
+            <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? 'w.publish' : 'w.next'))} · ${fcfa(step === 4 ? d.price : q.reference)}</button>
           </div>
         </form>
       </section>`;
@@ -576,6 +678,16 @@
     switch (b.dataset.act) {
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
+      case 'locate': view.draft.loc = 'busy'; render(); locate(); break;
+      case 'item': {
+        const q = view.draft.itemsQty, k = b.dataset.k;
+        q[k] = Math.max(0, (q[k] || 0) + +b.dataset.d);
+        if (!q[k]) delete q[k];
+        render();
+        break;
+      }
+      case 'more-items': view.moreItems = true; render(); break;
+      case 'upsize': view.draft.vehicle = b.dataset.v; render(); break;
       case 'swap': {
         const d = view.draft;
         [d.from, d.to] = [d.to, d.from];
@@ -612,9 +724,9 @@
       case 'report-open': view.reportOpen = true; render(); break;
       case 'again': {
         const o = store.getOrder(id);
-        const keepKeys = ['need', 'from', 'to', 'fromDetail', 'toDetail', 'vehicle', 'service', 'items', 'weight', 'floorsFrom', 'floorsTo', 'elevator', 'helpers', 'packing', 'dismantle', 'payment'];
+        const keepKeys = ['need', 'from', 'to', 'fromDetail', 'toDetail', 'vehicle', 'service', 'notes', 'itemsQty', 'weightManual', 'floorsFrom', 'floorsTo', 'elevator', 'helpers', 'payment'];
         const patch = {};
-        keepKeys.forEach(k => { patch[k] = o[k]; });
+        keepKeys.forEach(k => { if (o[k] !== undefined) patch[k] = JSON.parse(JSON.stringify(o[k])); });
         go('wizard', { step: 4, draft: newDraft(Object.assign(patch, { price: o.price })) });
         break;
       }
@@ -664,6 +776,12 @@
       return;
     }
     if (bindValue(el)) {
+      // Choisir l'arrivée ouvre directement la page suivante.
+      if (el.dataset.bind === 'to' && view.name === 'home') {
+        if (el.value) go('wizard', { step: 3 });
+        return;
+      }
+      if (el.dataset.bind === 'from' && view.name === 'home') view.draft.loc = 'manual';
       // Choisir un besoin propose le véhicule le plus adapté.
       if (el.dataset.bind === 'need') {
         view.draft.vehicle = NEED_VEHICLE[el.value];
@@ -690,20 +808,20 @@
       if (view.draft.service === 'handling' && view.draft.helpers < 1) view.draft.helpers = 1;
       go('wizard', { step: 3 });
     } else if (f.id === 'wizForm') {
-      if (view.step === 3 && !view.draft.items.trim()) {
-        document.getElementById('w-items-err').hidden = false;
-        document.getElementById('w-items').focus();
-        return;
-      }
       if (view.step < 4) { go('wizard', { step: view.step + 1 }); return; }
       const q = draftQuote(view.draft);
       if (!view.draft.price || view.draft.price < q.minimum) {
         document.getElementById('w-price-err').hidden = false;
         return;
       }
-      const o = store.createOrder(view.draft);
+      const d = view.draft;
+      d.items = itemsSummary(d);
+      const kg = loadKg(d);
+      d.weight = kg ? `≈ ${fmt(kg)} kg` : '';
+      if (d.service !== 'handling') Object.assign(d, { floorsFrom: 0, floorsTo: 0 });
+      const o = store.createOrder(d);
       ui.toast(t('toast.published'));
-      go('order', { orderId: o.id, draft: null });
+      go('order', { orderId: o.id, draft: null, moreItems: false });
     } else if (f.id === 'reportForm') {
       const text = document.getElementById('reportText').value.trim();
       if (!text) return;
@@ -761,7 +879,7 @@
 
   window.TKApp = {
     prefill(q) {
-      view.name = 'home';
+      view.name = 'wizard'; view.step = 3;
       view.draft = newDraft({ from: q.from, to: q.to, vehicle: q.vehicle, need: q.vehicle === 'tricycle' ? 'parcel' : 'furniture' });
     }
   };

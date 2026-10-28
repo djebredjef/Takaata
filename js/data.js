@@ -45,16 +45,28 @@
   function commune(id) { return COMMUNES.find(c => c.id === id); }
   function vehicle(id) { return VEHICLES.find(v => v.id === id); }
 
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+  }
+
   function distanceKm(fromId, toId) {
     const a = commune(fromId), b = commune(toId);
     if (!a || !b) return 0;
     if (a.id === b.id) return SAME_COMMUNE_KM;
-    const rad = Math.PI / 180;
-    const dLat = (b.lat - a.lat) * rad;
-    const dLon = (b.lon - a.lon) * rad;
-    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
-    const km = 2 * 6371 * Math.asin(Math.sqrt(h)) * ROAD_FACTOR;
-    return Math.round(km * 10) / 10;
+    return Math.round(haversineKm(a.lat, a.lon, b.lat, b.lon) * ROAD_FACTOR * 10) / 10;
+  }
+
+  // Commune la plus proche d'une position GPS (null si hors du Grand Abidjan).
+  function nearestCommune(lat, lon, maxKm = 15) {
+    let best = null, bestKm = Infinity;
+    for (const c of COMMUNES) {
+      const d = haversineKm(lat, lon, c.lat, c.lon);
+      if (d < bestKm) { best = c; bestKm = d; }
+    }
+    return bestKm <= maxKm ? best : null;
   }
 
   const roundUp100 = n => Math.ceil(n / 100) * 100;
@@ -88,6 +100,6 @@
 
   window.TK = Object.assign(window.TK || {}, {
     COMMISSION_RATE, VEHICLES, OPTIONS, COMMUNES, NEEDS, PAYMENTS, STATUSES,
-    commune, vehicle, distanceKm, quote, optionsTotal, commission, roundUp100
+    commune, vehicle, distanceKm, nearestCommune, quote, optionsTotal, commission, roundUp100
   });
 })();
