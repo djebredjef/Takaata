@@ -454,92 +454,6 @@
       <button class="btn btn-ghost btn-block" type="button" data-act="again" data-id="${o.id}">${esc(t('r.again'))}</button>`;
   }
 
-  // ---------- CHAUFFEUR ----------
-  function driverView() {
-    const d = store.state.driver;
-    const avail = store.available();
-    const mineActive = store.state.orders.filter(o => o.driver && o.driver.me && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status));
-    const open = store.state.orders.filter(o => o.status === 'open');
-    const pending = open.filter(o => o.offers.some(of => of.me && !of.declined));
-    const requests = open.filter(o => !pending.includes(o) && !(o.driver && o.driver.me));
-
-    return `
-      <section class="app-sec">
-        <div class="wallet">
-          <div class="wallet-head"><span>${esc(t('d.wallet'))}</span><span class="mono">${esc(d.name)}</span></div>
-          <div class="wallet-nums">
-            <div><small>${esc(t('d.balance'))}</small><b class="mono">${fmt(d.balance)}</b></div>
-            <div><small>${esc(t('d.reserved'))}</small><b class="mono">${fmt(store.held())}</b></div>
-            <div class="wallet-avail"><small>${esc(t('d.available'))}</small><b class="mono">${fmt(avail)}</b></div>
-          </div>
-          <div class="wallet-actions">
-            <label class="field field-inline"><span class="sr-only">Mobile Money</span>
-              <select id="rcChannel">${PAYMENTS.slice(1).map(p => `<option value="${p}">${esc(t('pay.' + p))}</option>`).join('')}</select>
-            </label>
-            ${[2000, 5000, 10000].map(n => `<button class="btn btn-light btn-sm" type="button" data-act="recharge" data-n="${n}">+${fmt(n)}</button>`).join('')}
-          </div>
-          ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))}</p>` : ''}
-          ${d.digitalEarnings ? `<p class="wallet-sub">${esc(t('d.digital'))} : <span class="mono">${fcfa(d.digitalEarnings)}</span></p>` : ''}
-        </div>
-        <div class="driver-prefs">
-          <label class="field field-inline"><span>${esc(t('d.vehicle'))}</span>
-            <select id="drvVehicle">${VEHICLES.map(v => `<option value="${v.id}"${v.id === d.vehicle ? ' selected' : ''}>${esc(t('veh.' + v.id))}</option>`).join('')}</select>
-          </label>
-          <span class="plate mono">${esc(d.plate)}</span>
-        </div>
-      </section>
-
-      ${mineActive.length ? `<section class="app-sec"><h2 class="app-h">${esc(t('d.myCourse'))}</h2>${mineActive.map(driverCourse).join('')}</section>` : ''}
-
-      ${pending.length ? `<section class="app-sec"><div class="stack">${pending.map(o => {
-        const mine = o.offers.find(of => of.me && !of.declined);
-        return `<div class="notice">${route(o)} · ${esc(t('d.offerSent', { p: fcfa(mine.price) }))}</div>`;
-      }).join('')}</div></section>` : ''}
-
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('d.requests'))}</h2>
-        ${requests.length ? `<div class="stack">${requests.map(requestCard).join('')}</div>` : `<p class="empty">${esc(t('d.noRequests'))}</p>`}
-      </section>
-
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('d.ledger'))}</h2>
-        ${d.ledger.length ? `<ol class="ledger-list">${d.ledger.slice(0, 30).map(l => `
-          <li><span><b>${esc(t('l.' + l.type))}</b><small>${l.orderId ? esc(l.orderId) + ' · ' : ''}${l.channel ? esc(t('pay.' + l.channel)) + ' · ' : ''}${date(l.at)} ${time(l.at)}</small></span>
-          <span class="mono ${['recharge', 'release'].includes(l.type) ? 'pos' : l.type === 'payout' ? 'neutral' : 'neg'}">${l.type === 'recharge' || l.type === 'release' ? '+' : l.type === 'payout' ? '' : '−'} ${fmt(l.amount)}</span></li>`).join('')}</ol>`
-          : `<p class="empty">${esc(t('d.noLedger'))}</p>`}
-      </section>`;
-  }
-
-  function requestCard(o) {
-    const d = store.state.driver;
-    const c = commission(o.price);
-    const avail = store.available();
-    const sameVehicle = o.vehicle === d.vehicle;
-    const msg = view.offerMsg[o.id];
-    const counterOpen = view.counterFor === o.id;
-    return `
-      <article class="request">
-        <div class="request-top">
-          <div><b>${route(o)}</b><small>${esc(t('need.' + o.need))} · <span class="mono">${ui.km(o.km)}</span> · ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}</small></div>
-          <b class="mono request-price">${fcfa(o.price)}</b>
-        </div>
-        <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
-        <p class="request-meta">${esc(t(o.service === 'handling' ? 'w.handling' : 'w.transportOnly'))}${o.service === 'handling' ? ` · ${esc(t('w.helpers'))} ${o.helpers}` : ''} · ${esc(t('pay.' + o.payment))}</p>
-        <p class="request-meta mono">${esc(t('d.commission', { c: fcfa(c) }))} · ${esc(t('d.minPrice', { p: fcfa(o.minimum) }))}</p>
-        ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
-          ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
-          ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
-          <div class="btn-row">
-            <button class="btn btn-signal btn-sm" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(o.price) }))}</button>
-            <button class="btn btn-ghost btn-sm" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
-          </div>
-          ${counterOpen ? `<form class="counter-form" data-id="${o.id}">
-            <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${o.minimum}" value="${TK.roundUp100(o.price * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
-            <button class="btn btn-signal btn-sm" type="submit">${esc(t('d.send'))}</button>
-          </form>` : ''}`}
-      </article>`;
-  }
-
   function driverCourse(o) {
     const nextKey = store.NEXT[o.status] ? 'd.next.' + o.status : null;
     return `
@@ -552,7 +466,7 @@
         <p class="request-items">${esc(o.items || '—')}</p>
         <p class="request-meta">${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}${o.fromDetail ? ` · ${esc(o.fromDetail)}` : ''}</p>
         <p class="notice">${esc(o.payment === 'cash'
-          ? t('d.cashHint', { p: fcfa(o.price), c: fcfa(o.commission) })
+          ? t('d.cashHint', { p: fcfa(o.price), n: fcfa(o.price - o.commission) })
           : t('d.mmHint', { m: t('pay.' + o.payment), n: fcfa(o.price - o.commission) }))}</p>
         ${['loading', 'transit', 'arrived'].includes(o.status) ? `
         <div class="photo-row">
@@ -572,7 +486,8 @@
     const delivered = s.orders.filter(o => o.status === 'delivered');
     const gmv = delivered.reduce((a, o) => a + o.price, 0);
     const comm = delivered.reduce((a, o) => a + o.commission, 0);
-    const led = s.driver.ledger;
+    const drvAcc = store.driver();
+    const led = drvAcc ? drvAcc.ledger : [];
     const recharges = led.filter(l => l.type === 'recharge').reduce((a, l) => a + l.amount, 0);
     const debits = led.filter(l => l.type === 'debit').reduce((a, l) => a + l.amount, 0);
     const expected = recharges - debits;
@@ -594,15 +509,24 @@
         </table></div>` : `<p class="empty">${esc(t('a.noOrders'))}</p>`}
       </section>
       <section class="app-sec">
-        <h2 class="app-h">${esc(t('a.recon'))} · ${esc(s.driver.name)}</h2>
+        <h2 class="app-h">${esc(t('a.drivers'))}</h2>
+        ${Object.values(s.driverAccounts).length ? `<ol class="ledger-list">${Object.values(s.driverAccounts).map(d => `
+          <li><span><b>${esc(d.firstName)} ${esc(d.lastName)}</b><small>${esc(fmtPhone(d.phone))} · ${esc(t('veh.' + d.vehicle))} · ${esc(d.plate)} · ${esc(t('da.licenseCats'))} ${esc(d.licenseCats.join(', '))}</small>
+            ${d.status === 'pending' ? `<span class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="a-review" data-ok="1" data-phone="${d.phone}">${esc(t('a.approve'))}</button>
+              <button class="btn btn-ghost btn-sm" type="button" data-act="a-review" data-ok="0" data-phone="${d.phone}">${esc(t('a.reject'))}</button></span>` : ''}</span>
+            <span class="pill pill-${d.status === 'approved' ? 'delivered' : d.status === 'rejected' ? 'cancelled' : 'open'}">${esc(t('st.' + d.status))}</span></li>`).join('')}</ol>`
+          : `<p class="empty">${esc(t('a.noDrivers'))}</p>`}
+      </section>
+      ${drvAcc ? `<section class="app-sec">
+        <h2 class="app-h">${esc(t('a.recon'))} · ${esc(drvAcc.firstName)} ${esc(drvAcc.lastName)}</h2>
         <dl class="kv">
           <div><dt>${esc(t('a.reconRecharges'))}</dt><dd class="mono">${fcfa(recharges)}</dd></div>
           <div><dt>${esc(t('a.reconDebits'))}</dt><dd class="mono">− ${fcfa(debits)}</dd></div>
           <div><dt>${esc(t('a.reconExpected'))}</dt><dd class="mono">${fcfa(expected)}</dd></div>
-          <div><dt>${esc(t('a.reconActual'))}</dt><dd class="mono">${fcfa(s.driver.balance)}</dd></div>
+          <div><dt>${esc(t('a.reconActual'))}</dt><dd class="mono">${fcfa(drvAcc.balance)}</dd></div>
         </dl>
-        <p class="${expected === s.driver.balance ? 'ok-line' : 'ko-line'}">${esc(t(expected === s.driver.balance ? 'a.reconOk' : 'a.reconKo'))}</p>
-      </section>
+        <p class="${expected === drvAcc.balance ? 'ok-line' : 'ko-line'}">${esc(t(expected === drvAcc.balance ? 'a.reconOk' : 'a.reconKo'))}</p>
+      </section>` : ''}
       <section class="app-sec">
         <h2 class="app-h">${esc(t('a.reports'))}</h2>
         ${s.reports.length ? `<ol class="ledger-list">${s.reports.map(r => {
@@ -1015,6 +939,521 @@
     </section>`;
   }
 
+  // ---------- CHAUFFEUR ----------
+  TK.addStrings({
+    fr: {
+      'dn.jobs': 'Courses', 'dn.gains': 'Gains', 'dn.me': 'Moi',
+      'da.joinT': 'Devenir chauffeur Takaata', 'da.joinS': 'Inscription en 5 étapes. Gardez sous la main votre pièce d’identité, votre permis et les papiers du véhicule.',
+      'da.loginT': 'Espace chauffeur', 'da.loginS': 'Connectez-vous avec le numéro de votre compte chauffeur.',
+      'da.s.id': 'Identité', 'da.s.license': 'Pièce et permis', 'da.s.vehicle': 'Véhicule', 'da.s.payout': 'Paiement des gains', 'da.s.review': 'Vérification',
+      'da.step': 'Étape {n} sur 5', 'da.birth': 'Date de naissance', 'da.age': '{n} ans', 'da.commune': 'Commune où vous travaillez le plus',
+      'da.tooYoung': 'Il faut avoir au moins 18 ans pour conduire avec Takaata.', 'da.badBirth': 'Indiquez votre date de naissance.',
+      'da.idType': 'Pièce d’identité', 'da.cni': 'Carte nationale d’identité', 'da.passport': 'Passeport', 'da.consular': 'Carte consulaire',
+      'da.idNumber': 'Numéro de la pièce', 'da.idFront': 'Pièce · recto', 'da.idBack': 'Pièce · verso', 'da.selfie': 'Photo de vous (visage)',
+      'da.licenseNumber': 'Numéro de permis de conduire', 'da.licenseCats': 'Catégories du permis', 'da.licenseExp': 'Date d’expiration du permis',
+      'da.license': 'Photo du permis', 'da.vehType': 'Type de véhicule', 'da.plate': 'Immatriculation', 'da.platePh': 'ex. 1234 AB 01',
+      'da.brand': 'Marque et modèle', 'da.brandPh': 'ex. Toyota Dyna, Hyundai H100', 'da.year': 'Année', 'da.owner': 'Vous êtes',
+      'da.ownerYes': 'Propriétaire', 'da.ownerNo': 'Conducteur pour un propriétaire', 'da.regCard': 'Carte grise', 'da.insurance': 'Attestation d’assurance',
+      'da.insuranceExp': 'Fin de l’assurance', 'da.inspectionExp': 'Fin de la visite technique', 'da.vehicleFront': 'Photo du véhicule (avant)', 'da.vehicleCargo': 'Photo de la caisse',
+      'da.payOp': 'Recevoir mes gains sur', 'da.payPhone': 'Numéro Mobile Money', 'da.paySame': 'Même numéro que mon compte',
+      'da.payNote': 'Vos gains des courses payées en Mobile Money sont reversés sur ce numéro.',
+      'da.accept': 'J’atteste que les informations et documents sont exacts et j’accepte les conditions chauffeur Takaata.',
+      'da.mustAccept': 'Cochez la case pour envoyer votre dossier.', 'da.submit': 'Envoyer mon dossier', 'da.next': 'Continuer', 'da.back': 'Retour',
+      'da.add': 'Ajouter', 'da.added': 'Ajoutée', 'da.missingDocs': 'Ajoutez les photos manquantes : {d}.', 'da.short': 'Complétez : {f}.',
+      'da.expired': '{f} : la date doit être dans le futur.', 'da.badPlate': 'Immatriculation au format 1234 AB 01.',
+      'da.badYear': 'Année du véhicule invalide.', 'da.catMismatch': 'Votre permis ne couvre pas un {v} : catégorie {c} requise.',
+      'da.exists': 'Un compte chauffeur existe déjà avec ce numéro. Connectez-vous.', 'da.unknown': 'Aucun compte chauffeur avec ce numéro. Inscrivez-vous.',
+      'da.join': 'Pas encore inscrit ? Devenir chauffeur', 'da.haveAccount': 'Déjà inscrit ? Se connecter',
+      'da.pendingT': 'Dossier en cours de vérification', 'da.pendingS': 'L’équipe Takaata vérifie vos documents sous 48 h. Vous serez prévenu par SMS.',
+      'da.pendingDemo': 'Prototype : validation automatique au bout de quelques secondes.', 'da.rejectedT': 'Dossier refusé',
+      'da.approved': 'Dossier validé : vous pouvez passer en ligne.',
+      'dj.online': 'En ligne', 'dj.offline': 'Hors ligne', 'dj.goOnline': 'Passer en ligne', 'dj.goOffline': 'Passer hors ligne',
+      'dj.offlineS': 'Vous êtes hors ligne. Passez en ligne pour recevoir les demandes près de vous.',
+      'dj.onlineS': 'Vous recevez les demandes pour votre {v}.', 'dj.price': 'Prix de la course', 'dj.net': 'Votre gain net',
+      'dj.lowGo': 'Recharger',
+      'dg.today': 'Gains nets aujourd’hui', 'dg.week': '7 derniers jours', 'dg.trips': 'Courses', 'dg.history': 'Courses effectuées',
+      'dg.noHistory': 'Vos courses terminées apparaîtront ici avec votre gain net.', 'dg.line': 'Prix {p} · net {n}',
+      'dm.trips': '{n} courses', 'dm.trip1': '1 course', 'dm.docs': 'Mes documents', 'dm.vehicle': 'Mon véhicule', 'dm.payout': 'Paiement des gains',
+      'dm.support': 'Aide chauffeur', 'dm.settings': 'Paramètres', 'dm.valid': 'Valide', 'dm.soon': 'Expire bientôt', 'dm.exp': 'Expiré',
+      'dm.until': 'jusqu’au {d}', 'dm.inspection': 'Visite technique', 'dm.docsNote': 'Mettez vos documents à jour avant expiration pour rester en ligne.',
+      'dm.supportS': 'Une question sur une course, un paiement ou votre dossier ?',
+      'st.pending': 'En vérification', 'st.approved': 'Validé', 'st.rejected': 'Refusé',
+      'l.reserve': 'Frais de service réservés', 'l.release': 'Frais de service libérés', 'l.debit': 'Frais de service',
+      'd.cashHint': 'Encaissez {p} en espèces. Votre gain net : {n}.', 'd.mmHint': 'Paiement {m} : {n} vous sera reversé après la livraison.',
+      'a.drivers': 'Chauffeurs', 'a.approve': 'Valider', 'a.reject': 'Refuser', 'a.noDrivers': 'Aucun chauffeur inscrit.', 'a.rejectWhy': 'Document illisible ou invalide'
+    },
+    en: {
+      'dn.jobs': 'Trips', 'dn.gains': 'Earnings', 'dn.me': 'Me',
+      'da.joinT': 'Drive with Takaata', 'da.joinS': 'Sign up in 5 steps. Keep your ID, driving licence and vehicle papers at hand.',
+      'da.loginT': 'Driver space', 'da.loginS': 'Sign in with the number of your driver account.',
+      'da.s.id': 'Identity', 'da.s.license': 'ID and licence', 'da.s.vehicle': 'Vehicle', 'da.s.payout': 'Earnings payout', 'da.s.review': 'Review',
+      'da.step': 'Step {n} of 5', 'da.birth': 'Date of birth', 'da.age': '{n} years old', 'da.commune': 'District where you work most',
+      'da.tooYoung': 'You must be at least 18 to drive with Takaata.', 'da.badBirth': 'Enter your date of birth.',
+      'da.idType': 'ID document', 'da.cni': 'National ID card', 'da.passport': 'Passport', 'da.consular': 'Consular card',
+      'da.idNumber': 'Document number', 'da.idFront': 'ID · front', 'da.idBack': 'ID · back', 'da.selfie': 'Photo of you (face)',
+      'da.licenseNumber': 'Driving licence number', 'da.licenseCats': 'Licence categories', 'da.licenseExp': 'Licence expiry date',
+      'da.license': 'Photo of the licence', 'da.vehType': 'Vehicle type', 'da.plate': 'Registration plate', 'da.platePh': 'e.g. 1234 AB 01',
+      'da.brand': 'Make and model', 'da.brandPh': 'e.g. Toyota Dyna, Hyundai H100', 'da.year': 'Year', 'da.owner': 'You are',
+      'da.ownerYes': 'The owner', 'da.ownerNo': 'Driving for an owner', 'da.regCard': 'Registration card', 'da.insurance': 'Insurance certificate',
+      'da.insuranceExp': 'Insurance end date', 'da.inspectionExp': 'Roadworthiness test end date', 'da.vehicleFront': 'Vehicle photo (front)', 'da.vehicleCargo': 'Cargo area photo',
+      'da.payOp': 'Receive my earnings on', 'da.payPhone': 'Mobile Money number', 'da.paySame': 'Same number as my account',
+      'da.payNote': 'Earnings from trips paid by Mobile Money are paid out to this number.',
+      'da.accept': 'I confirm the information and documents are accurate and I accept the Takaata driver terms.',
+      'da.mustAccept': 'Tick the box to send your application.', 'da.submit': 'Send my application', 'da.next': 'Continue', 'da.back': 'Back',
+      'da.add': 'Add', 'da.added': 'Added', 'da.missingDocs': 'Add the missing photos: {d}.', 'da.short': 'Complete: {f}.',
+      'da.expired': '{f}: the date must be in the future.', 'da.badPlate': 'Plate in the format 1234 AB 01.',
+      'da.badYear': 'Invalid vehicle year.', 'da.catMismatch': 'Your licence does not cover a {v}: category {c} required.',
+      'da.exists': 'A driver account already uses this number. Please sign in.', 'da.unknown': 'No driver account with this number. Sign up.',
+      'da.join': 'Not registered yet? Become a driver', 'da.haveAccount': 'Already registered? Sign in',
+      'da.pendingT': 'Application under review', 'da.pendingS': 'The Takaata team checks your documents within 48 h. You will be notified by SMS.',
+      'da.pendingDemo': 'Prototype: approved automatically after a few seconds.', 'da.rejectedT': 'Application refused',
+      'da.approved': 'Application approved: you can go online.',
+      'dj.online': 'Online', 'dj.offline': 'Offline', 'dj.goOnline': 'Go online', 'dj.goOffline': 'Go offline',
+      'dj.offlineS': 'You are offline. Go online to receive requests near you.',
+      'dj.onlineS': 'You receive requests for your {v}.', 'dj.price': 'Trip price', 'dj.net': 'Your net earnings',
+      'dj.lowGo': 'Top up',
+      'dg.today': 'Net earnings today', 'dg.week': 'Last 7 days', 'dg.trips': 'Trips', 'dg.history': 'Completed trips',
+      'dg.noHistory': 'Your completed trips will appear here with your net earnings.', 'dg.line': 'Price {p} · net {n}',
+      'dm.trips': '{n} trips', 'dm.trip1': '1 trip', 'dm.docs': 'My documents', 'dm.vehicle': 'My vehicle', 'dm.payout': 'Earnings payout',
+      'dm.support': 'Driver help', 'dm.settings': 'Settings', 'dm.valid': 'Valid', 'dm.soon': 'Expires soon', 'dm.exp': 'Expired',
+      'dm.until': 'until {d}', 'dm.inspection': 'Roadworthiness test', 'dm.docsNote': 'Update your documents before they expire to stay online.',
+      'dm.supportS': 'A question about a trip, a payment or your application?',
+      'st.pending': 'Under review', 'st.approved': 'Approved', 'st.rejected': 'Refused',
+      'l.reserve': 'Service fee held', 'l.release': 'Service fee released', 'l.debit': 'Service fee',
+      'd.cashHint': 'Collect {p} in cash. Your net earnings: {n}.', 'd.mmHint': '{m} payment: {n} will be paid to you after delivery.',
+      'a.drivers': 'Drivers', 'a.approve': 'Approve', 'a.reject': 'Refuse', 'a.noDrivers': 'No registered drivers.', 'a.rejectWhy': 'Unreadable or invalid document'
+    }
+  });
+
+  const LICENSE_FOR = { tricycle: ['A', 'B'], van1t: ['B', 'C'], truck3t: ['C'], truck10t: ['C'] };
+  const LICENSE_CATS = ['A', 'B', 'C', 'D', 'E'];
+  const DOCS_BY_STEP = { license: ['idFront', 'idBack', 'selfie', 'license'], vehicle: ['regCard', 'insurance', 'vehicleFront', 'vehicleCargo'] };
+  const SIGNUP_STEPS = ['id', 'license', 'vehicle', 'payout', 'review'];
+  const PLATE_RE = /^\d{1,4}\s?[A-Z]{2}\s?\d{2}$/i;
+  const net = price => price - commission(price);
+  const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const ageOf = iso => { if (!iso) return null; const b = new Date(iso), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
+  const future = iso => iso && new Date(iso).getTime() > Date.now();
+
+  function newDriverForm(phone) {
+    return { firstName: '', lastName: '', birth: '', phone: phone || '', commune: 'yopougon', idType: 'cni', idNumber: '', licenseNumber: '',
+      licenseCats: [], licenseExp: '', vehicle: 'van1t', plate: '', brand: '', year: '', owner: 'yes', insuranceExp: '', inspectionExp: '',
+      payOp: 'orange', payPhone: '', paySame: true, accept: false, docs: {} };
+  }
+  if (!view.dauth) view.dauth = { mode: 'signup', step: 'id', f: newDriverForm(), err: '' };
+  if (!view.dtab) view.dtab = 'jobs';
+
+  // Champs liés au formulaire d'inscription chauffeur.
+  const dIn = (key, label, opts = {}) => `<label class="field"><span>${esc(label)}</span>
+    <input id="df-${key}" data-dbind="${key}" type="${opts.type || 'text'}" value="${esc(view.dauth.f[key] || '')}"${opts.ph ? ` placeholder="${esc(opts.ph)}"` : ''}${opts.mode ? ` inputmode="${opts.mode}"` : ''}${opts.max ? ` maxlength="${opts.max}"` : ''}${opts.auto ? ` autocomplete="${opts.auto}"` : ''}></label>`;
+  const dDoc = key => {
+    const n = view.dauth.f.docs[key] || 0;
+    return `<label class="doc-in${n ? ' is-done' : ''}">
+      <input type="file" accept="image/*" capture="environment" id="dd-${key}" data-ddoc="${key}">
+      <span class="doc-ic" aria-hidden="true">${n ? '✓' : '+'}</span><span>${esc(t('da.' + key))}</span><small>${esc(t(n ? 'da.added' : 'da.add'))}</small></label>`;
+  };
+
+  function driverAuthView() {
+    const a = view.dauth, f = a.f;
+    const err = a.err ? `<p class="field-error" role="alert">${esc(a.err)}</p>` : '';
+    const head = (title, sub) => `<div class="auth-head"><span class="brand-mark auth-mark" aria-hidden="true"></span><h1 class="app-title">${esc(title)}</h1><p class="sub">${esc(sub)}</p></div>`;
+    const phoneField = `<label class="field"><span>${esc(t('au.phone'))}</span>
+      <span class="phone-in"><b class="mono">+225</b><input id="df-phone" data-dbind="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" value="${esc(f.phone)}" placeholder="07 00 00 00 00"></span></label>`;
+
+    if (a.step === 'otp') {
+      const wait = RESEND_S - Math.floor((Date.now() - a.otpAt) / 1000);
+      return `<section class="app-sec auth">${head(t('au.otpT'), t('au.otpS', { p: fmtPhone(f.phone) }))}
+        <p class="notice">${esc(t('au.demoCode', { c: a.otp }))}</p>
+        <form class="auth-form" id="dAuthForm" novalidate>
+          <input id="dauth-otp" class="otp-in mono" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="${esc(t('au.otpT'))}">
+          ${err}<button class="btn btn-signal btn-block" type="submit">${esc(t('au.verify'))}</button>
+        </form>
+        <div class="auth-links">
+          <button class="link-btn" type="button" data-act="da-resend"${wait > 0 ? ' disabled' : ''}>${esc(wait > 0 ? t('au.resendIn', { s: wait }) : t('au.resend'))}</button>
+          <button class="link-btn" type="button" data-act="da-edit">${esc(t('au.editPhone'))}</button>
+        </div></section>`;
+    }
+    if (a.mode === 'login') {
+      return `<section class="app-sec auth">${head(t('da.loginT'), t('da.loginS'))}
+        <form class="auth-form" id="dAuthForm" novalidate>${phoneField}${err}
+          <button class="btn btn-signal btn-block" type="submit">${esc(t('au.getCode'))}</button></form>
+        <button class="link-btn auth-switch" type="button" data-act="da-mode" data-mode="signup">${esc(t('da.join'))}</button></section>`;
+    }
+
+    const idx = SIGNUP_STEPS.indexOf(a.step);
+    let body = '';
+    if (a.step === 'id') {
+      const age = ageOf(f.birth);
+      body = `<div class="row-2">${dIn('firstName', t('au.first'), { auto: 'given-name' })}${dIn('lastName', t('au.last'), { auto: 'family-name' })}</div>
+        <label class="field"><span>${esc(t('da.birth'))}${age != null && age > 0 ? ` · <b>${esc(t('da.age', { n: age }))}</b>` : ''}</span>
+          <input id="df-birth" data-dbind="birth" type="date" value="${esc(f.birth)}" max="${new Date().toISOString().slice(0, 10)}"></label>
+        ${phoneField}
+        <label class="field"><span>${esc(t('da.commune'))}</span><select id="df-commune" data-dbind="commune">${ui.communeOptions(f.commune)}</select></label>`;
+    } else if (a.step === 'license') {
+      body = `<label class="field"><span>${esc(t('da.idType'))}</span><select id="df-idType" data-dbind="idType">
+          ${['cni', 'passport', 'consular'].map(k => `<option value="${k}"${f.idType === k ? ' selected' : ''}>${esc(t('da.' + k))}</option>`).join('')}</select></label>
+        ${dIn('idNumber', t('da.idNumber'))}
+        <div class="doc-grid">${DOCS_BY_STEP.license.slice(0, 3).map(dDoc).join('')}</div>
+        ${dIn('licenseNumber', t('da.licenseNumber'))}
+        <fieldset class="chips"><legend>${esc(t('da.licenseCats'))}</legend>
+          ${LICENSE_CATS.map(c => `<label class="chip-radio"><input type="checkbox" id="df-cat-${c}" data-dcat="${c}"${f.licenseCats.includes(c) ? ' checked' : ''}><span>${c}</span></label>`).join('')}
+        </fieldset>
+        ${dIn('licenseExp', t('da.licenseExp'), { type: 'date' })}
+        <div class="doc-grid">${dDoc('license')}</div>`;
+    } else if (a.step === 'vehicle') {
+      body = `<fieldset class="chips"><legend>${esc(t('da.vehType'))}</legend>
+          ${VEHICLES.map(v => `<label class="chip-radio"><input type="radio" name="df-vehicle" id="df-veh-${v.id}" value="${v.id}" data-dbind="vehicle"${f.vehicle === v.id ? ' checked' : ''}><span>${esc(t('veh.' + v.id))}</span></label>`).join('')}
+        </fieldset>
+        <p class="hint">${esc(t('da.licenseCats'))} : ${LICENSE_FOR[f.vehicle].join(' / ')}</p>
+        <div class="row-2">${dIn('plate', t('da.plate'), { ph: t('da.platePh'), max: 12 })}${dIn('year', t('da.year'), { type: 'number', mode: 'numeric' })}</div>
+        ${dIn('brand', t('da.brand'), { ph: t('da.brandPh') })}
+        <fieldset class="chips"><legend>${esc(t('da.owner'))}</legend>
+          <label class="chip-radio"><input type="radio" name="df-owner" id="df-owner-yes" value="yes" data-dbind="owner"${f.owner === 'yes' ? ' checked' : ''}><span>${esc(t('da.ownerYes'))}</span></label>
+          <label class="chip-radio"><input type="radio" name="df-owner" id="df-owner-no" value="no" data-dbind="owner"${f.owner === 'no' ? ' checked' : ''}><span>${esc(t('da.ownerNo'))}</span></label>
+        </fieldset>
+        <div class="row-2">${dIn('insuranceExp', t('da.insuranceExp'), { type: 'date' })}${dIn('inspectionExp', t('da.inspectionExp'), { type: 'date' })}</div>
+        <div class="doc-grid">${DOCS_BY_STEP.vehicle.map(dDoc).join('')}</div>`;
+    } else if (a.step === 'payout') {
+      body = `<fieldset class="chips"><legend>${esc(t('da.payOp'))}</legend>
+          ${PAYMENTS.slice(1).map(p => `<label class="chip-radio"><input type="radio" name="df-payOp" id="df-pay-${p}" value="${p}" data-dbind="payOp"${f.payOp === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}
+        </fieldset>
+        <label class="check"><input type="checkbox" id="df-paySame" data-dbind="paySame"${f.paySame ? ' checked' : ''}><span>${esc(t('da.paySame'))} · <span class="mono">${esc(fmtPhone(f.phone))}</span></span></label>
+        ${f.paySame ? '' : `<label class="field"><span>${esc(t('da.payPhone'))}</span><span class="phone-in"><b class="mono">+225</b><input id="df-payPhone" data-dbind="payPhone" type="tel" inputmode="numeric" maxlength="14" value="${esc(f.payPhone)}"></span></label>`}
+        <p class="hint">${esc(t('da.payNote'))}</p>`;
+    } else if (a.step === 'review') {
+      const row = (k, v) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`;
+      body = `<dl class="kv">
+          ${row(t('au.first') + ' / ' + t('au.last'), `${f.firstName} ${f.lastName}`)}
+          ${row(t('da.birth'), t('da.age', { n: ageOf(f.birth) }))}
+          ${row(t('au.phone'), fmtPhone(f.phone))}
+          ${row(t('da.idType'), t('da.' + f.idType) + ' · ' + f.idNumber)}
+          ${row(t('da.licenseNumber'), `${f.licenseNumber} · ${f.licenseCats.join(', ')}`)}
+          ${row(t('da.vehType'), `${t('veh.' + f.vehicle)} · ${f.plate.toUpperCase()}`)}
+          ${row(t('da.brand'), `${f.brand} · ${f.year}`)}
+          ${row(t('da.payOp'), `${t('pay.' + f.payOp)} · ${fmtPhone(f.paySame ? f.phone : f.payPhone)}`)}
+        </dl>
+        <label class="check"><input type="checkbox" id="df-accept" data-dbind="accept"${f.accept ? ' checked' : ''}><span>${esc(t('da.accept'))}</span></label>`;
+    }
+    return `<section class="app-sec auth">
+      ${idx === 0 ? head(t('da.joinT'), t('da.joinS')) : `<div class="wiz-head"><button class="link-btn" type="button" data-act="da-prev">← ${esc(t('da.back'))}</button><span class="mono">${esc(t('da.step', { n: idx + 1 }))}</span></div>`}
+      <ol class="wiz-bar wiz-bar-5" aria-hidden="true">${SIGNUP_STEPS.map((s, i) => `<li class="${i <= idx ? 'is-done' : ''}"></li>`).join('')}</ol>
+      <h2 class="app-h">${esc(t('da.step', { n: idx + 1 }))} · ${esc(t('da.s.' + a.step))}</h2>
+      <form class="auth-form" id="dAuthForm" novalidate>${body}${err}
+        <button class="btn btn-signal btn-block" type="submit">${esc(t(a.step === 'review' ? 'da.submit' : idx === 0 ? 'au.getCode' : 'da.next'))}</button>
+      </form>
+      ${idx === 0 ? `<button class="link-btn auth-switch" type="button" data-act="da-mode" data-mode="login">${esc(t('da.haveAccount'))}</button>` : ''}
+    </section>`;
+  }
+
+  function validateDriverStep() {
+    const a = view.dauth, f = a.f;
+    const missing = fields => fields.filter(([k]) => !String(f[k] || '').trim()).map(([, l]) => l);
+    const docsMissing = keys => keys.filter(k => !f.docs[k]).map(k => t('da.' + k));
+    if (a.step === 'id') {
+      f.phone = String(f.phone).replace(/\D/g, '').replace(/^225(?=\d{10}$)/, '');
+      const m = missing([['firstName', t('au.first')], ['lastName', t('au.last')]]);
+      if (m.length) return t('da.short', { f: m.join(', ') });
+      const age = ageOf(f.birth);
+      if (age == null || isNaN(age)) return t('da.badBirth');
+      if (age < 18) return t('da.tooYoung');
+      if (!PHONE_RE.test(f.phone)) return t('au.badPhone');
+      if (store.driverAccount(f.phone)) { a.mode = 'login'; return t('da.exists'); }
+    }
+    if (a.step === 'license') {
+      const m = missing([['idNumber', t('da.idNumber')], ['licenseNumber', t('da.licenseNumber')]]);
+      if (!f.licenseCats.length) m.push(t('da.licenseCats'));
+      if (m.length) return t('da.short', { f: m.join(', ') });
+      if (!future(f.licenseExp)) return t('da.expired', { f: t('da.licenseExp') });
+      const d = docsMissing(DOCS_BY_STEP.license);
+      if (d.length) return t('da.missingDocs', { d: d.join(', ') });
+    }
+    if (a.step === 'vehicle') {
+      const m = missing([['plate', t('da.plate')], ['brand', t('da.brand')], ['year', t('da.year')]]);
+      if (m.length) return t('da.short', { f: m.join(', ') });
+      if (!PLATE_RE.test(f.plate.trim())) return t('da.badPlate');
+      const y = +f.year;
+      if (!(y >= 1985 && y <= new Date().getFullYear() + 1)) return t('da.badYear');
+      if (!future(f.insuranceExp)) return t('da.expired', { f: t('da.insuranceExp') });
+      if (!future(f.inspectionExp)) return t('da.expired', { f: t('da.inspectionExp') });
+      if (!LICENSE_FOR[f.vehicle].some(c => f.licenseCats.includes(c))) return t('da.catMismatch', { v: t('veh.' + f.vehicle), c: LICENSE_FOR[f.vehicle].join(' / ') });
+      const d = docsMissing(DOCS_BY_STEP.vehicle);
+      if (d.length) return t('da.missingDocs', { d: d.join(', ') });
+    }
+    if (a.step === 'payout' && !f.paySame) {
+      f.payPhone = String(f.payPhone).replace(/\D/g, '');
+      if (!PHONE_RE.test(f.payPhone)) return t('au.badPhone');
+    }
+    if (a.step === 'review' && !f.accept) return t('da.mustAccept');
+    return '';
+  }
+
+  function sendDriverOtp() {
+    const a = view.dauth;
+    a.otp = String(Math.floor(100000 + Math.random() * 900000));
+    a.otpAt = Date.now();
+    a.err = '';
+    a.step = 'otp';
+  }
+
+  function submitDriverAuth() {
+    const a = view.dauth, f = a.f;
+    if (a.step === 'otp') {
+      const code = (document.getElementById('dauth-otp').value || '').replace(/\D/g, '');
+      if (Date.now() - a.otpAt > OTP_TTL) { a.err = t('au.expired'); return render(); }
+      if (code !== a.otp) { a.err = t('au.badOtp'); return render(); }
+      if (a.mode === 'login') { store.driverLogin(f.phone); view.dauth = { mode: 'login', step: 'id', f: newDriverForm(), err: '' }; view.dtab = 'jobs'; return render(); }
+      a.verified = true;
+      a.step = 'license';
+      a.err = '';
+      return render();
+    }
+    if (a.mode === 'login') {
+      f.phone = String(f.phone).replace(/\D/g, '').replace(/^225(?=\d{10}$)/, '');
+      if (!PHONE_RE.test(f.phone)) { a.err = t('au.badPhone'); return render(); }
+      if (!store.driverAccount(f.phone)) { a.mode = 'signup'; a.step = 'id'; a.err = t('da.unknown'); return render(); }
+      sendDriverOtp();
+      return render();
+    }
+    a.err = validateDriverStep();
+    if (a.err) { render(); const e = root.querySelector('.field-error'); if (e) e.scrollIntoView({ block: 'center' }); return; }
+    if (a.step === 'id') {
+      if (a.verified && a.verifiedPhone === f.phone) { a.step = 'license'; return dgo(); }
+      a.verifiedPhone = f.phone;
+      sendDriverOtp();
+      return render();
+    }
+    if (a.step === 'review') {
+      const { accept, paySame, ...profile } = f;
+      store.driverRegister(Object.assign(profile, { plate: f.plate.trim().toUpperCase(), payPhone: paySame ? f.phone : f.payPhone }));
+      view.dauth = { mode: 'login', step: 'id', f: newDriverForm(), err: '' };
+      view.dtab = 'jobs';
+      return dgo();
+    }
+    a.step = SIGNUP_STEPS[SIGNUP_STEPS.indexOf(a.step) + 1];
+    dgo();
+  }
+
+  function dgo() { render(); window.scrollTo({ top: 0 }); }
+
+  function driverNav() {
+    const item = (tab, key, path) => `<button type="button" class="bn-item${view.dtab === tab ? ' is-on' : ''}" data-act="dtab" data-tab="${tab}"${view.dtab === tab ? ' aria-current="page"' : ''}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><span>${esc(t(key))}</span></button>`;
+    return `<nav class="bottom-nav" aria-label="${esc(t('role.driver'))}">
+      ${item('jobs', 'dn.jobs', 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z')}
+      ${item('gains', 'dn.gains', 'M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2')}
+      ${item('me', 'dn.me', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0')}
+    </nav>`;
+  }
+
+  function driverApp() {
+    const d = store.driver();
+    if (view.dtab === 'gains') return driverGains(d);
+    if (view.dtab === 'me') return driverMe(d);
+    return driverJobs(d);
+  }
+
+  function walletCard(d) {
+    const avail = store.available();
+    return `<div class="wallet">
+        <div class="wallet-head"><span>${esc(t('d.wallet'))}</span><span class="mono">${esc(t('d.balance'))} ${fmt(d.balance)}</span></div>
+        <div class="wallet-main"><small>${esc(t('d.available'))}</small><b class="mono">${fmt(avail)} <small>FCFA</small></b></div>
+        <div class="wallet-actions">
+          <label class="field field-inline"><span class="sr-only">Mobile Money</span>
+            <select id="rcChannel">${PAYMENTS.slice(1).map(p => `<option value="${p}"${p === d.payOp ? ' selected' : ''}>${esc(t('pay.' + p))}</option>`).join('')}</select>
+          </label>
+          ${[2000, 5000, 10000].map(n => `<button class="btn btn-light btn-sm" type="button" data-act="recharge" data-n="${n}">+${fmt(n)}</button>`).join('')}
+        </div>
+        ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))}</p>` : ''}
+      </div>`;
+  }
+
+  function driverJobs(d) {
+    if (d.status !== 'approved') {
+      return `<section class="app-sec">
+        <div class="review-card${d.status === 'rejected' ? ' is-ko' : ''}">
+          <span class="pill pill-${d.status === 'rejected' ? 'cancelled' : 'open'}">${esc(t('st.' + d.status))}</span>
+          <h1 class="app-title">${esc(t(d.status === 'rejected' ? 'da.rejectedT' : 'da.pendingT'))}</h1>
+          <p>${esc(d.status === 'rejected' ? d.rejectReason || t('a.rejectWhy') : t('da.pendingS'))}</p>
+          ${d.status === 'pending' ? `<p class="hint">${esc(t('da.pendingDemo'))}</p>` : ''}
+        </div></section>`;
+    }
+    const mineActive = store.state.orders.filter(o => o.driver && o.driver.me && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status));
+    const open = store.state.orders.filter(o => o.status === 'open');
+    const pending = open.filter(o => o.offers.some(of => of.me && !of.declined));
+    const requests = open.filter(o => !pending.includes(o));
+    const avail = store.available();
+    return `
+      <section class="app-sec">
+        <button type="button" class="online-toggle${d.online ? ' is-on' : ''}" data-act="d-online" aria-pressed="${!!d.online}">
+          <span class="online-dot" aria-hidden="true"></span>
+          <span class="online-txt"><b>${esc(t(d.online ? 'dj.online' : 'dj.offline'))}</b><small>${esc(d.online ? t('dj.onlineS', { v: t('veh.' + d.vehicle) }) : t('dj.offlineS'))}</small></span>
+          <span class="online-cta">${esc(t(d.online ? 'dj.goOffline' : 'dj.goOnline'))}</span>
+        </button>
+        ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
+      </section>
+      ${mineActive.length ? `<section class="app-sec"><h2 class="app-h">${esc(t('d.myCourse'))}</h2>${mineActive.map(driverCourse).join('')}</section>` : ''}
+      ${pending.length ? `<section class="app-sec"><div class="stack">${pending.map(o => {
+        const mine = o.offers.find(of => of.me && !of.declined);
+        return `<div class="notice">${route(o)} · ${esc(t('d.offerSent', { p: fcfa(mine.price) }))}</div>`;
+      }).join('')}</div></section>` : ''}
+      ${d.online ? `<section class="app-sec">
+        <h2 class="app-h">${esc(t('d.requests'))}</h2>
+        ${requests.length ? `<div class="stack">${requests.map(requestCard).join('')}</div>` : `<p class="empty">${esc(t('d.noRequests'))}</p>`}
+      </section>` : ''}`;
+  }
+
+  function driverGains(d) {
+    const e = d.earnings || [];
+    const sum = since => e.filter(x => x.at >= since).reduce((a, x) => a + x.net, 0);
+    const week = Date.now() - 7 * 864e5;
+    return `
+      <section class="app-sec">
+        <div class="gain-hero">
+          <small>${esc(t('dg.today'))}</small>
+          <b class="mono">${fmt(sum(today0()))} <small>FCFA</small></b>
+          <div class="gain-sub"><span>${esc(t('dg.week'))} <b class="mono">${fcfa(sum(week))}</b></span><span>${esc(t('dg.trips'))} <b class="mono">${e.filter(x => x.at >= week).length}</b></span></div>
+        </div>
+        ${walletCard(d)}
+      </section>
+      <section class="app-sec">
+        <h2 class="app-h">${esc(t('dg.history'))}</h2>
+        ${e.length ? `<ol class="ledger-list">${e.map(x => `<li><span><b>${esc(commune(x.route[0]).name)} → ${esc(commune(x.route[1]).name)}</b>
+          <small>${date(x.at)} ${time(x.at)} · ${esc(t('pay.' + x.channel))} · ${esc(t('dg.line', { p: fmt(x.price), n: fmt(x.net) }))}</small></span><span class="mono pos">+ ${fmt(x.net)}</span></li>`).join('')}</ol>`
+          : `<p class="empty">${esc(t('dg.noHistory'))}</p>`}
+      </section>
+      <section class="app-sec">
+        <h2 class="app-h">${esc(t('d.ledger'))}</h2>
+        ${d.ledger.some(l => !['reserve', 'release'].includes(l.type)) ? `<ol class="ledger-list">${d.ledger.filter(l => !['reserve', 'release'].includes(l.type)).slice(0, 30).map(l => `
+          <li><span><b>${esc(t('l.' + l.type))}</b><small>${l.orderId ? esc(l.orderId) + ' · ' : ''}${l.channel ? esc(t('pay.' + l.channel)) + ' · ' : ''}${date(l.at)} ${time(l.at)}</small></span>
+          <span class="mono ${['recharge', 'release'].includes(l.type) ? 'pos' : l.type === 'payout' ? 'neutral' : 'neg'}">${l.type === 'recharge' || l.type === 'release' ? '+' : l.type === 'payout' ? '' : '−'} ${fmt(l.amount)}</span></li>`).join('')}</ol>`
+          : `<p class="empty">${esc(t('d.noLedger'))}</p>`}
+      </section>`;
+  }
+
+  function docStatus(iso) {
+    if (!iso) return ['', ''];
+    const ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) return ['dm.exp', 'cancelled'];
+    if (ms < 30 * 864e5) return ['dm.soon', 'open'];
+    return ['dm.valid', 'delivered'];
+  }
+
+  function driverMe(d) {
+    const sub = view.dmeSub || '';
+    const back = `<button class="link-btn" type="button" data-act="dme-sub" data-sub="">← ${esc(t('dn.me'))}</button>`;
+    const longDate = iso => new Date(iso).toLocaleDateString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (sub === 'docs') {
+      const docRow = (label, iso) => { const [k, cls] = docStatus(iso); return `<li><span><b>${esc(label)}</b>${iso ? `<small>${esc(t('dm.until', { d: longDate(iso) }))}</small>` : ''}</span>${k ? `<span class="pill pill-${cls}">${esc(t(k))}</span>` : ''}</li>`; };
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.docs'))}</h1>
+        <ol class="ledger-list">
+          ${docRow(`${t('da.' + d.idType)} · ${d.idNumber}`, '')}
+          ${docRow(`${t('da.licenseNumber')} · ${d.licenseCats.join(', ')}`, d.licenseExp)}
+          ${docRow(t('da.insurance'), d.insuranceExp)}
+          ${docRow(t('dm.inspection'), d.inspectionExp)}
+        </ol><p class="hint">${esc(t('dm.docsNote'))}</p></section>`;
+    }
+    if (sub === 'vehicle') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.vehicle'))}</h1>
+        <div class="home-veh">${TK.vehicles.stage(d.vehicle, 'data-none').replace(/<button type="button" class="veh-arrow[^>]*>.<\/button>/g, '')}</div>
+        <dl class="kv">
+          <div><dt>${esc(t('da.vehType'))}</dt><dd>${esc(t('veh.' + d.vehicle))}</dd></div>
+          <div><dt>${esc(t('da.plate'))}</dt><dd><span class="plate mono">${esc(d.plate)}</span></dd></div>
+          <div><dt>${esc(t('da.brand'))}</dt><dd>${esc(d.brand)} · ${esc(d.year)}</dd></div>
+          <div><dt>${esc(t('da.owner'))}</dt><dd>${esc(t(d.owner === 'yes' ? 'da.ownerYes' : 'da.ownerNo'))}</dd></div>
+        </dl></section>`;
+    }
+    if (sub === 'payout') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.payout'))}</h1>
+        <dl class="kv"><div><dt>${esc(t('da.payOp'))}</dt><dd>${esc(t('pay.' + d.payOp))}</dd></div>
+          <div><dt>${esc(t('da.payPhone'))}</dt><dd class="mono">${esc(fmtPhone(d.payPhone))}</dd></div></dl>
+        <p class="hint">${esc(t('da.payNote'))}</p></section>`;
+    }
+    if (sub === 'support') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.support'))}</h1>
+        <p class="sub">${esc(t('dm.supportS'))}</p>
+        <dl class="kv"><div><dt>${esc(t('me.supportPhone'))}</dt><dd>${esc(t('me.tbd'))}</dd></div></dl>
+        ${view.supportSent ? `<p class="notice">${esc(t('me.sent'))}</p>` : `<form class="report" id="dSupportForm">
+          <label class="field"><span>${esc(t('me.write'))}</span><textarea id="dSupportText" rows="3" placeholder="${esc(t('me.writePh'))}"></textarea></label>
+          <button class="btn btn-signal btn-sm" type="submit">${esc(t('t.send'))}</button></form>`}
+      </section>`;
+    }
+    if (sub === 'settings') {
+      return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.settings'))}</h1>
+        <fieldset class="chips"><legend>${esc(t('me.lang'))}</legend>
+          <button type="button" class="chip-btn${TK.getLang() === 'fr' ? ' is-on' : ''}" data-act="set-lang" data-lang="fr">Français</button>
+          <button type="button" class="chip-btn${TK.getLang() === 'en' ? ' is-on' : ''}" data-act="set-lang" data-lang="en">English</button>
+        </fieldset>
+        ${dLogoutBlock()}</section>`;
+    }
+    const rating = store.driverRating(d);
+    const item = (key, label, icon, extra) => `<li><button type="button" class="me-item" data-act="dme-sub" data-sub="${key}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}"/></svg><span>${esc(label)}</span>${extra || ''}<i aria-hidden="true">›</i></button></li>`;
+    const docsWarn = [d.licenseExp, d.insuranceExp, d.inspectionExp].some(x => docStatus(x)[0] !== 'dm.valid');
+    return `<section class="app-sec">
+        <div class="me-head">
+          <span class="me-avatar avatar-ini" aria-hidden="true">${initials(d.firstName + ' ' + d.lastName)}</span>
+          <div class="me-id">
+            <b>${esc(d.firstName)} ${esc(d.lastName)}</b>
+            <span class="mono">${esc(fmtPhone(d.phone))}</span>
+            <span><span class="stars">${stars(rating)}</span> ${rating.toLocaleString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} · ${esc(t(d.trips === 1 ? 'dm.trip1' : 'dm.trips', { n: d.trips }))}</span>
+          </div>
+          <span class="pill pill-${d.status === 'approved' ? 'delivered' : d.status === 'rejected' ? 'cancelled' : 'open'}">${esc(t('st.' + d.status))}</span>
+        </div>
+        <div class="me-stats">
+          <div><b class="plate mono">${esc(d.plate)}</b><small>${esc(t('veh.' + d.vehicle))}</small></div>
+          <div><b class="mono">${d.trips}</b><small>${esc(t('dg.trips'))}</small></div>
+          <div><b class="mono">${esc(t('da.age', { n: ageOf(d.birth) }))}</b><small>${esc(commune(d.commune).name)}</small></div>
+        </div>
+        <ul class="me-menu">
+          ${item('docs', t('dm.docs'), MENU_ICONS.invoices, docsWarn ? `<span class="me-badge">!</span>` : '')}
+          ${item('vehicle', t('dm.vehicle'), 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z')}
+          ${item('payout', t('dm.payout'), 'M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2')}
+          ${item('support', t('dm.support'), MENU_ICONS.support)}
+          ${item('settings', t('dm.settings'), MENU_ICONS.settings)}
+        </ul>
+        ${dLogoutBlock()}
+      </section>`;
+  }
+
+  function dLogoutBlock() {
+    if (!view.confirmLogout) return `<button class="link-btn danger" type="button" data-act="logout-ask">${esc(t('me.logout'))}</button>`;
+    return `<div class="confirm-inline"><p>${esc(t('me.logoutQ'))}</p><div class="btn-row">
+      <button class="btn btn-danger btn-sm" type="button" data-act="d-logout">${esc(t('me.logout'))}</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-act="logout-no">${esc(t('a.resetNo'))}</button></div></div>`;
+  }
+
+  function requestCard(o) {
+    const d = store.driver();
+    const c = commission(o.price);
+    const avail = store.available();
+    const sameVehicle = o.vehicle === d.vehicle;
+    const msg = view.offerMsg[o.id];
+    const counterOpen = view.counterFor === o.id;
+    return `
+      <article class="request">
+        <div class="request-top">
+          <div><b>${route(o)}</b><small>${esc(t('need.' + o.need))} · <span class="mono">${ui.km(o.km)}</span> · ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}</small></div>
+        </div>
+        <div class="earn-row">
+          <div><small>${esc(t('dj.price'))}</small><b class="mono">${fcfa(o.price)}</b></div>
+          <div class="earn-net"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o.price))}</b></div>
+        </div>
+        <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
+        <p class="request-meta">${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` · ${esc(t('w.helpers'))} ${o.helpers}` : ''} · ${esc(t('pay.' + o.payment))} · ${esc(t('d.minPrice', { p: fcfa(o.minimum) }))}</p>
+        ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
+          ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
+          ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
+          <div class="btn-row">
+            <button class="btn btn-signal btn-sm" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(o.price) }))}</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
+          </div>
+          ${counterOpen ? `<form class="counter-form" data-id="${o.id}">
+            <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${o.minimum}" value="${TK.roundUp100(o.price * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
+            <button class="btn btn-signal btn-sm" type="submit">${esc(t('d.send'))}</button>
+          </form>` : ''}`}
+      </article>`;
+  }
+
   // ---------- rendu ----------
   function currentRole() { return ROUTES[location.hash.slice(1)] || null; }
 
@@ -1037,11 +1476,12 @@
     const signedIn = !!store.user() && view.auth.step !== 'setpass';
     if (role === 'client' && !signedIn) body = authView();
     else if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : view.name === 'me' ? meView() : clientHome();
-    else if (role === 'driver') body = driverView();
+    else if (role === 'driver') body = store.driver() ? driverApp() : driverAuthView();
     else body = adminView();
 
-    const withNav = role === 'client' && signedIn;
-    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${withNav ? bottomNav() : ''}`;
+    const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
+    const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
+    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}`;
 
     Object.entries(keep).forEach(([id, v]) => {
       const el = document.getElementById(id);
@@ -1084,6 +1524,21 @@
     switch (b.dataset.act) {
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
+      case 'dtab': view.dtab = b.dataset.tab; view.dmeSub = ''; view.confirmLogout = false; view.supportSent = false; dgo(); break;
+      case 'dme-sub': view.dmeSub = b.dataset.sub; view.confirmLogout = false; view.supportSent = false; dgo(); break;
+      case 'd-online': store.setDriver({ online: !store.driver().online }); break;
+      case 'd-logout': store.driverLogout(); view.confirmLogout = false; view.dtab = 'jobs'; view.dauth = { mode: 'login', step: 'id', f: newDriverForm(), err: '' }; dgo(); break;
+      case 'da-mode': view.dauth = { mode: b.dataset.mode, step: 'id', f: newDriverForm(view.dauth.f.phone), err: '' }; dgo(); break;
+      case 'da-prev': {
+        const a = view.dauth, i = SIGNUP_STEPS.indexOf(a.step);
+        a.err = '';
+        a.step = i > 0 ? SIGNUP_STEPS[i - 1] : 'id';
+        dgo();
+        break;
+      }
+      case 'da-resend': sendDriverOtp(); render(); break;
+      case 'da-edit': view.dauth.step = 'id'; view.dauth.err = ''; dgo(); break;
+      case 'a-review': store.reviewDriver(b.dataset.phone, b.dataset.ok === '1', b.dataset.ok === '1' ? '' : t('a.rejectWhy')); break;
       case 'me': go('me', { meSub: '', confirmLogout: false, supportSent: false }); break;
       case 'me-sub': go('me', { meSub: b.dataset.sub, confirmLogout: false, supportSent: false }); break;
       case 'logout-ask': view.confirmLogout = true; render(); break;
@@ -1198,13 +1653,33 @@
   // Glisser sur l'illustration pour changer de véhicule.
   TK.vehicles.swipe(root, dir => { if (view.draft && view.name === 'home') setVehicle(TK.vehicles.step(view.draft.vehicle, dir)); });
 
+  function dBind(el) {
+    const f = view.dauth && view.dauth.f;
+    if (!f) return false;
+    if (el.dataset.dcat) {
+      const c = el.dataset.dcat;
+      f.licenseCats = el.checked ? f.licenseCats.concat(c) : f.licenseCats.filter(x => x !== c);
+      return true;
+    }
+    if (el.dataset.ddoc) { f.docs[el.dataset.ddoc] = el.files ? el.files.length : 0; return true; }
+    if (!el.dataset.dbind) return false;
+    f[el.dataset.dbind] = el.type === 'checkbox' ? el.checked : el.value;
+    return true;
+  }
+
   root.addEventListener('input', e => {
+    if (e.target.dataset.dbind && e.target.matches('input:not([type=checkbox]):not([type=radio]), textarea')) { dBind(e.target); return; }
     if (e.target.matches('input[type=text], input:not([type]), textarea, input[type=number], input[type=datetime-local]')) bindValue(e.target);
   });
 
   root.addEventListener('change', e => {
     const el = e.target;
-    if (el.id === 'drvVehicle') { store.setDriver({ vehicle: el.value }); return; }
+    if (el.dataset.dbind || el.dataset.dcat || el.dataset.ddoc) {
+      dBind(el);
+      // Les champs texte gardent la saisie ; le reste (date, choix, photos) met l'écran à jour.
+      if (!el.matches('input[type=text], input[type=tel], input[type=number], input:not([type])')) render();
+      return;
+    }
     if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
     if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
     if (el.dataset.act === 'photos') {
@@ -1242,6 +1717,15 @@
     e.preventDefault();
     const f = e.target;
     if (f.id === 'authForm') { submitAuth(); return; }
+    if (f.id === 'dAuthForm') { submitDriverAuth(); return; }
+    if (f.id === 'dSupportForm') {
+      const text = document.getElementById('dSupportText').value.trim();
+      if (!text) return;
+      store.report(null, `[${t('role.driver')} ${fmtPhone(store.driver().phone)}] ${text}`);
+      view.supportSent = true;
+      render();
+      return;
+    }
     if (f.id === 'passForm') {
       const p = document.getElementById('set-pass').value;
       if (p.length < 6) { document.getElementById('set-pass-err').hidden = false; return; }
@@ -1346,11 +1830,13 @@
       }
       if (ev.type === 'accepted' && currentRole() === 'driver') ui.toast(t('toast.accepted'));
       if (ev.type === 'declined' && currentRole() === 'driver') ui.toast(t('d.declined'));
+      if (ev.type === 'approved' && currentRole() === 'driver') ui.toast(t('da.approved'));
     });
     // Comptes à rebours : clôture automatique, renvoi du code SMS.
     const role = currentRole();
     const o = view.name === 'order' && store.getOrder(view.orderId);
     if (role === 'client' && !store.user() && view.auth.step === 'otp') render();
+    else if (role === 'driver' && !store.driver() && view.dauth.step === 'otp') render();
     else if (role === 'client' && o && o.status === 'arrived' && o.autoConfirmAt) render();
     else if (role === 'driver' && store.state.orders.some(x => x.driver && x.driver.me && x.status === 'arrived')) render();
   }, 1000);

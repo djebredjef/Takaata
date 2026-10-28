@@ -48,11 +48,8 @@
       lang: 'fr',
       role: 'client',
       orders: [],
-      driver: {
-        name: 'Ouattara Adama', vehicle: 'van1t', plate: '2187 HB 01',
-        balance: 10000, holds: {}, digitalEarnings: 0,
-        ledger: [{ at: Date.now(), type: 'recharge', amount: 10000, channel: 'orange' }]
-      },
+      driverAccounts: {},   // chauffeurs par numéro : dossier, véhicule, solde prépayé, gains
+      driverSession: null,
       reports: [],
       leads: [],
       accounts: {},     // comptes clients par numéro (prototype local ; Firebase Auth au lancement)
@@ -136,40 +133,44 @@
   }
 
   // --- solde chauffeur ---
-  function held() { return Object.values(state.driver.holds).reduce((s, n) => s + n, 0); }
-  function available() { return state.driver.balance - held(); }
-  function ledger(type, amount, extra) { state.driver.ledger.unshift(Object.assign({ at: Date.now(), type, amount }, extra)); }
+  // Chauffeur connecté sur cet appareil.
+  function drv() { return state.driverAccounts[state.driverSession] || null; }
+
+  function held() { return drv() ? Object.values(drv().holds).reduce((s, n) => s + n, 0) : 0; }
+  function available() { return drv() ? drv().balance - held() : 0; }
+  function ledger(type, amount, extra) { drv().ledger.unshift(Object.assign({ at: Date.now(), type, amount }, extra)); }
 
   function recharge(amount, channel) {
-    state.driver.balance += amount;
+    drv().balance += amount;
     ledger('recharge', amount, { channel });
     emit();
   }
 
   function hold(orderId, amount) {
-    state.driver.holds[orderId] = amount;
+    drv().holds[orderId] = amount;
     ledger('reserve', amount, { orderId });
   }
   function release(orderId) {
-    const amount = state.driver.holds[orderId];
+    const amount = drv().holds[orderId];
     if (amount == null) return;
-    delete state.driver.holds[orderId];
+    delete drv().holds[orderId];
     ledger('release', amount, { orderId });
   }
 
   // Offre de « mon » chauffeur : vérifie et réserve 15 % avant d'envoyer.
   function driverOffer(orderId, price) {
     const o = getOrder(orderId);
-    if (!o || o.status !== 'open') return { ok: false };
+    const dd = drv();
+    if (!o || o.status !== 'open' || !dd || dd.status !== 'approved' || !dd.online) return { ok: false };
     if (o.offers.some(of => of.me && !of.declined)) return { ok: false };
     price = Math.max(o.minimum, Math.round(price));
     const c = commission(price);
     if (available() < c) return { ok: false, missing: c - available() };
     hold(o.id, c);
-    const d = state.driver;
+    const d = drv();
     o.offers.push({
-      id: `${o.id}-me`, me: true, at: Date.now(), name: d.name, rating: 4.8, trips: 42, plate: d.plate,
-      phone: '+225 07 48 21 63 90', eta: 6, price, kind: price === o.price ? 'accept' : 'counter'
+      id: `${o.id}-me`, me: true, at: Date.now(), name: `${d.firstName} ${d.lastName}`, rating: driverRating(d), trips: d.trips,
+      plate: d.plate, phone: '+225 ' + d.phone.replace(/(\d{2})(?=\d)/g, '$1 '), eta: 6, price, kind: price === o.price ? 'accept' : 'counter'
     });
     // Les clients simulés répondent après quelques secondes.
     if (o.owner === 'other') o.pendingDecision = Date.now() + SIM.decision;
@@ -184,11 +185,11 @@
     if (!offer) return;
     if (offer.me) {
       // Réservation déjà faite ; on vérifie qu'elle couvre bien le prix retenu.
-      if (state.driver.holds[o.id] !== commission(offer.price)) return;
+      if (!drv() || drv().holds[o.id] !== commission(offer.price)) return;
     } else {
       // Mon offre éventuelle n'est pas retenue : libération immédiate.
       const mine = o.offers.find(of => of.me && !of.declined);
-      if (mine) { mine.declined = true; release(o.id); }
+      if (mine) { mine.declined = true; if (drv()) release(o.id); }
     }
     o.driver = offer;
     o.price = offer.price;
@@ -233,15 +234,18 @@
       u.rating = ((u.rating || 5) * (u.ratingCount || 0) + 5) / ((u.ratingCount || 0) + 1);
       u.ratingCount = (u.ratingCount || 0) + 1;
     }
-    if (o.driver && o.driver.me) {
+    if (o.driver && o.driver.me && drv()) {
       const c = o.commission;
-      delete state.driver.holds[o.id];
+      const d = drv();
+      d.trips = (d.trips || 0) + 1;
+      d.earnings.unshift({ at: Date.now(), orderId: o.id, route: [o.from, o.to], price: o.price, net: o.price - c, channel: o.payment });
+      delete drv().holds[o.id];
       if (o.payment === 'cash') {
-        state.driver.balance -= c;
+        drv().balance -= c;
         ledger('debit', c, { orderId: o.id });
       } else {
         const net = o.price - c;
-        state.driver.digitalEarnings += net;
+        drv().digitalEarnings += net;
         ledger('payout', net, { orderId: o.id, channel: o.payment });
       }
     }
@@ -260,7 +264,7 @@
     o.cancelFree = cancelInfo(o).free;
     o.status = 'cancelled';
     o.timeline.cancelled = Date.now();
-    if (state.driver.holds[o.id] != null) release(o.id);
+    if (drv() && drv().holds[o.id] != null) release(o.id);
     emit();
   }
 
@@ -270,8 +274,8 @@
     o.rating = stars;
     o.ratingTags = tags || [];
     o.ratingComment = comment || '';
-    if (o.driver && o.driver.me) {
-      const d = state.driver;
+    if (o.driver && o.driver.me && drv()) {
+      const d = drv();
       d.ratingSum = (d.ratingSum || 0) + stars;
       d.ratingCount = (d.ratingCount || 0) + 1;
     }
@@ -335,7 +339,7 @@
             events.push({ type: 'accepted', order: o });
           } else {
             mine.declined = true;
-            release(o.id);
+            if (drv()) release(o.id);
             events.push({ type: 'declined', order: o });
           }
         }
@@ -353,20 +357,51 @@
         changed = true;
       }
     }
+    for (const d of Object.values(state.driverAccounts)) {
+      if (d.status === 'pending' && now - d.submittedAt >= DEMO_REVIEW_MS) {
+        d.status = 'approved'; d.reviewedAt = now; changed = true;
+        if (d.phone === state.driverSession) events.push({ type: 'approved' });
+      }
+    }
     if (changed) emit();
     return events;
   }
 
   function reset() {
-    const { lang, accounts, session } = state;
+    const { lang, accounts, session, driverAccounts, driverSession } = state;
     state = defaultState();
-    Object.assign(state, { lang, accounts, session });
+    // Les comptes restent ; soldes et gains des chauffeurs repartent de zéro.
+    Object.values(driverAccounts).forEach(d => Object.assign(d, { online: false, balance: 0, holds: {}, ledger: [], digitalEarnings: 0, earnings: [], trips: 0, ratingSum: 0, ratingCount: 0 }));
+    Object.assign(state, { lang, accounts, session, driverAccounts, driverSession });
     seed();
     emit();
   }
 
   function set(patch) { Object.assign(state, patch); emit(); }
-  function setDriver(patch) { Object.assign(state.driver, patch); emit(); }
+  function setDriver(patch) { if (drv()) { Object.assign(drv(), patch); emit(); } }
+
+  // --- comptes chauffeurs ---
+  const DEMO_REVIEW_MS = 8000;  // prototype : dossier validé automatiquement après 8 s (réel : équipe Takaata)
+  function driverRating(d) { return d.ratingCount ? d.ratingSum / d.ratingCount : 5; }
+  function driverAccount(phone) { return state.driverAccounts[phone] || null; }
+  function driverRegister(profile) {
+    state.driverAccounts[profile.phone] = Object.assign({
+      status: 'pending', submittedAt: Date.now(), online: false, trips: 0, ratingSum: 0, ratingCount: 0,
+      balance: 0, holds: {}, ledger: [], digitalEarnings: 0, earnings: []
+    }, profile);
+    state.driverSession = profile.phone;
+    emit();
+  }
+  function driverLogin(phone) { if (state.driverAccounts[phone]) { state.driverSession = phone; emit(); } }
+  function driverLogout() { if (drv()) drv().online = false; state.driverSession = null; emit(); }
+  function reviewDriver(phone, ok, reason) {
+    const d = state.driverAccounts[phone];
+    if (!d) return;
+    d.status = ok ? 'approved' : 'rejected';
+    d.reviewedAt = Date.now();
+    d.rejectReason = ok ? '' : (reason || '');
+    emit();
+  }
   function addLead(lead) { state.leads.push(Object.assign({ at: Date.now() }, lead)); emit(); }
 
   load();
@@ -378,6 +413,7 @@
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
       advance, confirmDelivery, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
+      driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
       held, available, NEXT, AUTO_CLOSE_MS
     }
   });
