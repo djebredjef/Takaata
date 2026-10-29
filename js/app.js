@@ -127,6 +127,7 @@
     return `
       <section class="app-sec">
         <h1 class="app-title">${esc(t('c.history'))}</h1>
+        ${recurringBlock()}
         ${active.length ? `<h2 class="app-h">${esc(t('c.active'))}</h2><div class="stack">${active.map(orderRow).join('')}</div>` : ''}
         ${myBookingsBlock()}
         ${past.length ? `<div class="stack">${past.map(orderRow).join('')}</div>` : active.length || store.myBookings().length ? '' : `<p class="empty">${esc(t('c.noHistory'))}</p>`}
@@ -293,10 +294,12 @@
         <fieldset class="chips"><legend>${esc(t('w.when'))}</legend>
           <label class="chip-radio"><input type="radio" name="when" id="w-when-now" value="now" data-bind="when"${d.when === 'now' ? ' checked' : ''}><span>${esc(t('w.now'))}</span></label>
           <label class="chip-radio"><input type="radio" name="when" id="w-when-later" value="later" data-bind="when"${d.when === 'later' ? ' checked' : ''}><span>${esc(t('w.later'))}</span></label>
+          <label class="chip-radio"><input type="radio" name="when" id="w-when-weekly" value="weekly" data-bind="when"${d.when === 'weekly' ? ' checked' : ''}><span>${esc(t('rc.weekly'))}</span></label>
         </fieldset>
         ${d.when === 'later' ? `<label class="field"><span class="sr-only">${esc(t('w.later'))}</span><input type="datetime-local" id="w-whenAt" data-bind="whenAt" value="${esc(d.whenAt)}"></label>` : ''}
+        ${d.when === 'weekly' ? weeklyPicker(d) : ''}
         <fieldset class="chips"><legend>${esc(t('w.payment'))}</legend>
-          ${PAYMENTS.map(p => `<label class="chip-radio"><input type="radio" name="payment" id="w-pay-${p}" value="${p}" data-bind="payment"${d.payment === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}
+          ${payChoices().map(p => `<label class="chip-radio"><input type="radio" name="payment" id="w-pay-${p}" value="${p}" data-bind="payment"${d.payment === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}
         </fieldset>
         <p class="hint">${esc(t('w.priceNote'))}</p>`;
     }
@@ -311,7 +314,7 @@
         <h1 class="app-title">${esc(t(titles[step]))}</h1>
         <form class="wiz-form" id="wizForm" novalidate>${body}
           <div class="wiz-actions">
-            <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? 'w.publish' : 'w.next'))}${step === 4 ? ` · ${fcfa(d.price)}` : ''}</button>
+            <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? (d.when === 'weekly' ? 'rc.publish' : 'w.publish') : 'w.next'))}${step === 4 ? ` · ${fcfa(d.price)}` : ''}</button>
           </div>
         </form>
       </section>`;
@@ -452,7 +455,8 @@
           <div class="plate mono" aria-label="Immatriculation">${esc(dv.plate)}</div>
         </article>
         ${callBlock(o, 'client')}
-        ${['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) ? safetyBar(o, 'client') : ''}
+        ${['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) ? safetyBar(o, 'client') + `
+        <a class="btn btn-light btn-block" href="${waLink('', trackMessage(o))}" target="_blank" rel="noopener">🔗 ${esc(t('tr.share'))}</a>` : ''}
         ${['assigned', 'pickup'].includes(o.status) && o.clientPhone ? `<div class="code-box"><span>${esc(t('cv.clientCodeT'))}</span><b class="mono">${esc(o.clientPhone.slice(-4))}</b><small>${esc(t('cv.clientCodeS'))}</small></div>` : ''}
         ${o.deliveryCode && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) ? `<div class="code-box code-box-dl"><span>${esc(t('dc.title'))}</span><b class="mono">${esc(o.deliveryCode)}</b><small>${esc(t(o.status === 'arrived' ? 'dc.nowS' : 'dc.s'))}</small></div>` : ''}
 
@@ -496,6 +500,7 @@
           <h1 class="app-title">${route(o)}</h1>
           ${pill(o.status)}
         </div>
+        <button class="listen-btn" type="button" data-act="listen" data-id="${o.id}">🔊 ${esc(t('vo.listen'))}</button>
         <p class="sub">${esc(t('need.' + o.need))} · ${esc(t('veh.' + o.vehicle))} · <span class="mono">${ui.km(o.km)}</span></p>
         <div class="map-card">${ui.routeMap(o.from, o.to, progress)}</div>
         ${main}
@@ -838,6 +843,7 @@
     invoices: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
     support: 'M4 13a8 8 0 0 1 16 0v4h-4v-5h4M4 12h4v5H4zM16 17a4 4 0 0 1-4 3',
     invite: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M19 8v6M16 11h6',
+    business: 'M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1M10 21v-4h4v4',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .2-1.3-1.3L17 5l-3-1-1 2h-2L10 4 7 5l.3 1.9L6 8.2 4 8l-1 3 2 1v0l-2 1 1 3 2-.2 1.3 1.3L7 19l3 1 1-2h2l1 2 3-1-.3-1.9 1.3-1.3 2 .2 1-3z'
   };
 
@@ -888,6 +894,7 @@
           <button type="button" class="chip-btn${TK.getLang() === 'en' ? ' is-on' : ''}" data-act="set-lang" data-lang="en">English</button>
         </fieldset>
         <label class="check"><input type="checkbox" id="set-notif"${u.notif ? ' checked' : ''}><span>${esc(t('me.notif'))}</span></label>
+        ${prefsBlock()}
         <form class="report" id="passForm">
           <label class="field"><span>${esc(t(u.passHash ? 'me.passSet' : 'me.passNone'))}</span>
             <input id="set-pass" type="password" autocomplete="new-password" minlength="6" placeholder="${esc(t('au.newPass'))}"></label>
@@ -897,6 +904,7 @@
         ${logoutBlock()}
       </section>`;
     }
+    if (sub === 'business') return businessView(u, back);
     if (sub === 'profile') {
       return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('me.m.profile'))}</h1>
         <form class="auth-form" id="profileForm">
@@ -935,7 +943,7 @@
         </div>
         <ul class="me-menu">
           ${item('coupons', coupons.length ? `<span class="me-badge">${coupons.length}</span>` : '')}
-          ${item('invoices')}${item('support')}${item('invite')}${item('settings')}
+          ${item('business', u.business ? `<span class="me-badge me-badge-ok">✓</span>` : '')}${item('invoices')}${item('support')}${item('invite')}${item('settings')}
         </ul>
         ${logoutBlock()}
       </section>`;
@@ -1071,7 +1079,7 @@
   function newDriverForm(phone) {
     return { firstName: '', lastName: '', birth: '', phone: phone || '', commune: 'yopougon', idType: 'cni', idNumber: '', licenseNumber: '',
       licenseCats: [], licenseExp: '', vehicle: 'van1t', plate: '', brand: '', year: '', owner: 'yes', insuranceExp: '', inspectionExp: '',
-      payOp: 'orange', payPhone: '', paySame: true, accept: false, docs: {} };
+      payOp: 'orange', payPhone: '', paySame: true, accept: false, refCode: '', docs: {} };
   }
   if (!view.dauth) view.dauth = { mode: 'signup', step: 'id', f: newDriverForm(), err: '' };
   if (!view.dtab) view.dtab = 'jobs';
@@ -1168,6 +1176,7 @@
           ${row(t('da.brand'), `${f.brand} · ${f.year}`)}
           ${row(t('da.payOp'), `${t('pay.' + f.payOp)} · ${fmtPhone(f.paySame ? f.phone : f.payPhone)}`)}
         </dl>
+        ${dIn('refCode', t('rf.code'), { ph: 'ABCD-1234', max: 12 })}
         <label class="check"><input type="checkbox" id="df-accept" data-dbind="accept"${f.accept ? ' checked' : ''}><span>${esc(t('da.accept'))}</span></label>`;
     }
     return `<section class="app-sec auth">
@@ -1219,6 +1228,7 @@
       f.payPhone = String(f.payPhone).replace(/\D/g, '');
       if (!PHONE_RE.test(f.payPhone)) return t('au.badPhone');
     }
+    if (a.step === 'review' && f.refCode && f.refCode.trim() && !store.findDriverByCode(f.refCode)) return t('rf.bad');
     if (a.step === 'review' && !f.accept) return t('da.mustAccept');
     return '';
   }
@@ -1259,7 +1269,9 @@
       return render();
     }
     if (a.step === 'review') {
-      const { accept, paySame, ...profile } = f;
+      const { accept, paySame, refCode, ...profile } = f;
+      const sponsor = refCode && refCode.trim() ? store.findDriverByCode(refCode) : null;
+      if (sponsor) profile.referredBy = sponsor.phone;
       store.driverRegister(Object.assign(profile, { plate: f.plate.trim().toUpperCase(), payPhone: paySame ? f.phone : f.payPhone }));
       view.dauth = { mode: 'login', step: 'id', f: newDriverForm(), err: '' };
       view.dtab = 'jobs';
@@ -1403,7 +1415,9 @@
     const avail = store.available();
     // Course en cours : l'écran ne montre que la navigation et l'action suivante.
     if (mineActive.length) return courseNav(mineActive[0]);
+    const toRate = view.rateClientFor && store.getOrder(view.rateClientFor);
     return `
+      ${toRate && toRate.status === 'delivered' && !toRate.clientRating ? clientRateCard(toRate) : ''}
       ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
       ${avail < BALANCE_ALERTS[0] ? `<p class="wallet-alert${avail < BALANCE_ALERTS[1] ? ' is-ko' : ''}">${esc(t(avail < BALANCE_ALERTS[1] ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
       ${d.online && notifState() === 'default' ? `<div class="notif-hint"><span>${esc(t('nt.enableS'))}</span><button class="btn btn-light btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button></div>` : ''}
@@ -1502,8 +1516,10 @@
           <button type="button" class="chip-btn${TK.getLang() === 'en' ? ' is-on' : ''}" data-act="set-lang" data-lang="en">English</button>
         </fieldset>
         ${notifSettings()}
+        ${prefsBlock()}
         ${dLogoutBlock()}</section>`;
     }
+    if (sub === 'invite') return driverInviteView(d, back);
     const rating = store.driverRating(d);
     const item = (key, label, icon, extra) => `<li><button type="button" class="me-item" data-act="dme-sub" data-sub="${key}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}"/></svg><span>${esc(label)}</span>${extra || ''}<i aria-hidden="true">›</i></button></li>`;
@@ -1529,6 +1545,7 @@
           ${item('docs', t('dm.docs'), MENU_ICONS.invoices, docsWarn ? `<span class="me-badge">!</span>` : '')}
           ${item('vehicle', t('dm.vehicle'), 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z')}
           ${item('payout', t('dm.payout'), 'M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2')}
+          ${item('invite', t('rf.menu'), MENU_ICONS.invite, store.referrals(d).length ? `<span class="me-badge">${store.referrals(d).length}</span>` : '')}
           ${item('support', t('dm.support'), MENU_ICONS.support)}
           ${item('settings', t('dm.settings'), MENU_ICONS.settings)}
         </ul>
@@ -1548,7 +1565,7 @@
     return `
       <button type="button" class="request request-btn" data-act="rf-open" data-id="${o.id}">
         <div class="request-top">
-          <div><b>${route(o)}</b><small>${esc(t('need.' + o.need))} · <span class="mono">${ui.km(o.km)}</span> · ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}</small></div>
+          <div><b>${route(o)}</b><small>${esc(t('need.' + o.need))} · <span class="mono">${ui.km(o.km)}</span> · ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}${clientBadge(o)}</small></div>
           <span class="rq-go" aria-hidden="true">›</span>
         </div>
         <div class="earn-row">
@@ -1580,6 +1597,7 @@
           <li><b>${esc(commune(o.from).name)}</b>${o.fromDetail ? `<small>${esc(o.fromDetail)}</small>` : ''}</li>
           <li><b>${esc(commune(o.to).name)}</b>${o.toDetail ? `<small>${esc(o.toDetail)}</small>` : ''}</li>
         </ol>
+        <p class="request-meta">${esc(o.owner === 'me' ? t('role.client') : o.client || '')}${clientBadge(o)}</p>
         <p class="request-meta"><span class="mono">${ui.km(o.km)}</span> · ${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''} · ${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` (${o.helpers})` : ''} · ${esc(t('pay.' + o.payment))}</p>
         ${clientMedia(o)}
         ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
@@ -1939,7 +1957,7 @@
       <tbody>${list.map(u => {
         const os = s.orders.filter(o => o.clientPhone === u.phone);
         const done = os.filter(o => o.status === 'delivered');
-        return `<tr class="adm-row" data-act="adm-client" data-phone="${u.phone}" tabindex="0"><td><b>${esc(u.firstName)} ${esc(u.lastName)}</b></td><td class="mono">${esc(fmtPhone(u.phone))}</td>
+        return `<tr class="adm-row" data-act="adm-client" data-phone="${u.phone}" tabindex="0"><td><b>${esc(u.firstName)} ${esc(u.lastName)}</b>${u.business ? ` <span class="pill pill-delivered">${esc(u.business.name)}</span>` : ''}</td><td class="mono">${esc(fmtPhone(u.phone))}</td>
           <td>${date(u.createdAt)}</td><td class="mono">${done.length} / ${os.length}</td><td class="mono">${fmt(done.reduce((x, o) => x + o.price, 0))}</td>
           <td>${u.ratingCount ? (u.rating || 5).toFixed(1) : '—'}</td></tr>`;
       }).join('')}</tbody></table></div>`;
@@ -2000,6 +2018,7 @@
         <label class="field"><span>${esc(t('ad.floorFee'))}</span><input class="mono" type="number" min="0" step="50" id="pr-floor" value="${TK.OPTIONS.floor}"></label>
       </div>
       <p class="hint">${esc(t('ad.priceNote'))} ${esc(t('ad.example', { v: t('veh.van1t'), p: fcfa(ex) }))}</p>
+      <label class="field"><span>${esc(t('rf.adminBonus'))}</span><span class="price-input"><input id="pr-refbonus" type="number" min="0" step="500" value="${(store.state.settings || {}).driverRefBonus || ''}" placeholder="0"><span>FCFA</span></span></label>
       <label class="field"><span>${esc(t('ad.wa'))}</span><span class="phone-in"><b class="mono">+225</b><input id="pr-wa" type="tel" inputmode="numeric" maxlength="14" value="${esc((store.state.settings || {}).whatsapp || '')}" placeholder="${esc(t('ad.waPh'))}"></span></label>
       <div class="btn-row">
         <button class="btn btn-signal" type="submit">${esc(t('ad.save'))}</button>
@@ -3076,6 +3095,42 @@
       'nv.startNote': 'Prenez des photos du chargement : elles sont obligatoires pour démarrer, avec un scan du visage.', 'nv.needPhotos': 'Prenez d’abord au moins une photo du chargement.',
       'd.proofHint2': 'Photos = preuve en cas de litige.', 'd.next.loading': 'Démarrer la course', 'd.next.transit': 'Je suis arrivé',
       'vv.reprop': 'Proposer un autre prix', 'da.selfie': 'Scan du visage en direct',
+      'tr.share': 'Partager le suivi avec le destinataire', 'tr.tag': 'Suivi de livraison', 'tr.title': 'Votre livraison arrive', 'tr.done': 'Livraison terminée',
+      'tr.msg': 'Takaata · Une livraison arrive pour vous : {r}. Chauffeur {d} ({pl}). Suivez-la en direct : {u} . Code de livraison à donner au chauffeur seulement si tout est en ordre : {c}',
+      'tr.eta': 'Arrivée estimée vers {h}', 'tr.codeNote': 'Vérifiez la marchandise à l’arrivée, puis donnez au chauffeur le code de livraison reçu par message.',
+      'tr.missing': 'Ce suivi n’est pas disponible sur cet appareil. Au lancement, le lien fonctionnera sur tous les téléphones.', 'tr.discover': 'Découvrir Takaata',
+      'vo.listen': 'Écouter', 'vo.test': 'Bonjour, je suis la voix de Takaata. Je vous annonce chaque étape de votre course.',
+      'vo.open': 'Votre demande est publiée. Nous cherchons un chauffeur.', 'vo.offers': 'Vous avez {n} offres de chauffeurs. Choisissez celle qui vous convient.', 'vo.offer1': 'Vous avez une offre de chauffeur.',
+      'vo.newOffer': 'Nouvelle offre d’un chauffeur.',
+      'vo.assigned': '{d} a accepté votre course. Votre code de livraison est : {c}.', 'vo.pickup': '{d} est en route vers vous.',
+      'vo.loading': 'Le chauffeur est arrivé. Chargement en cours.', 'vo.transit': 'Votre marchandise est en route vers la destination.',
+      'vo.arrived': 'Le chauffeur est arrivé à destination. Vérifiez vos biens, puis donnez le code : {c}.', 'vo.delivered': 'Livraison terminée. Merci d’avoir choisi Takaata.',
+      'vo.cancelled': 'Votre course est annulée.', 'vo.req': 'Nouvelle course : {r}. Gain {n} francs.', 'vo.dAssigned': 'Le client a accepté. Appuyez sur Je pars maintenant.',
+      'pf.title': 'Confort d’utilisation', 'pf.voice': 'Annonces vocales à chaque étape', 'pf.big': 'Texte plus grand', 'pf.data': 'Économie de données (photos plus légères)',
+      'pf.test': 'Tester la voix', 'pf.note': 'La voix utilise le français du téléphone. Des annonces enregistrées en dioula et en nouchi pourront être ajoutées.',
+      'net.off': 'Hors connexion : l’application reste utilisable. Vos actions seront envoyées dès le retour du réseau.',
+      'rc.weekly': 'Chaque semaine', 'rc.days': 'Jours', 'rc.time': 'Heure', 'rc.note': 'La demande est publiée automatiquement 1 h avant, au même prix. Vous pouvez la suspendre à tout moment.',
+      'rc.d1': 'Lun', 'rc.d2': 'Mar', 'rc.d3': 'Mer', 'rc.d4': 'Jeu', 'rc.d5': 'Ven', 'rc.d6': 'Sam', 'rc.d0': 'Dim',
+      'rc.publish': 'Programmer chaque semaine', 'rc.noDay': 'Choisissez au moins un jour.', 'rc.saved': 'Course programmée : {d} à {h}',
+      'rc.title': 'Courses programmées', 'rc.every': 'Chaque {d} à {h}', 'rc.next': 'Prochaine course : {d} à {h} · demande publiée 1 h avant',
+      'rc.paused': 'En pause', 'rc.pause': 'Suspendre', 'rc.resume': 'Reprendre', 'rc.runNow': 'Publier la prochaine maintenant', 'rc.del': 'Supprimer',
+      'rc.deleted': 'Course programmée supprimée', 'rc.published': 'Votre course programmée vient d’être publiée',
+      'cr.new': 'nouveau client', 'cr.title': 'Comment s’est passée la course avec {n} ?',
+      'cr.ready': 'Prêt à l’heure', 'cr.polite': 'Poli', 'cr.packed': 'Bien emballé', 'cr.helped': 'A aidé au chargement',
+      'cr.wait': 'Attente longue', 'cr.mismatch': 'Marchandise non conforme', 'cr.rude': 'Impoli', 'cr.payment': 'Problème de paiement',
+      'pay.invoice': 'Facture mensuelle', 'me.m.business': 'Compte entreprise',
+      'bz.title': 'Compte entreprise', 'bz.pitch': 'Pour les boutiques, grossistes et entreprises qui livrent souvent.',
+      'bz.p1': 'Paiement sur facture mensuelle, à 30 jours', 'bz.p2': 'Plusieurs employés commandent sur le même compte', 'bz.p3': 'Relevé du mois téléchargeable pour votre comptabilité',
+      'bz.name': 'Raison sociale', 'bz.ncc': 'N° de compte contribuable (NCC)', 'bz.nccPh': 'Facultatif', 'bz.commune': 'Commune du siège',
+      'bz.err': 'Indiquez la raison sociale.', 'bz.create': 'Créer le compte entreprise', 'bz.created': 'Compte entreprise créé',
+      'bz.invoice': 'Payer sur facture mensuelle (30 jours)', 'bz.invoiceNote': 'Au lancement, la facture mensuelle est ouverte après validation du dossier par Takaata.',
+      'bz.month': 'Ce mois-ci', 'bz.toPay': 'Sur facture', 'bz.csv': 'Télécharger le relevé (CSV)', 'bz.members': 'Membres',
+      'bz.owner': 'Administrateur du compte', 'bz.member': 'Peut commander', 'bz.addMember': 'Ajouter', 'bz.membersNote': 'Les membres commandent avec leur propre numéro ; les courses sont facturées à l’entreprise.',
+      'rf.menu': 'Parrainer un chauffeur', 'rf.code': 'Code de parrainage (facultatif)', 'rf.bad': 'Code de parrainage inconnu. Vérifiez-le ou laissez vide.',
+      'rf.pitch': 'Invitez un chauffeur avec votre code. Quand il termine ses {n} premières courses, vous recevez {b}.', 'rf.tbd': 'un bonus (montant annoncé au lancement)',
+      'rf.share': 'Inviter par WhatsApp', 'rf.msg': 'Rejoins Takaata comme chauffeur partenaire : tu gardes 85 % de chaque course. Inscris-toi avec mon code {c} : {u}',
+      'rf.list': 'Mes filleuls', 'rf.none': 'Aucun filleul pour le moment.', 'rf.progress': '{n} / {m} courses', 'rf.done': 'Objectif atteint : bonus débloqué',
+      'rf.note': 'Le bonus est versé sur votre solde après validation par Takaata.', 'rf.adminBonus': 'Bonus de parrainage chauffeur (après 10 courses)',
       'rc.other': 'Autre montant', 'rc.ph': 'Montant', 'rc.go': 'Recharger', 'rc.min': 'Recharge minimum : {p}.',
       'loc.share': 'Partager ma position', 'loc.none': 'position GPS indisponible',
       'loc.msgD': 'Takaata · Je suis en course {r} ({pl}). Ma position : {l}',
@@ -3117,6 +3172,42 @@
       'nv.startNote': 'Take photos of the load: they are required to start, with a face scan.', 'nv.needPhotos': 'First take at least one photo of the load.',
       'd.proofHint2': 'Photos = proof in case of dispute.', 'd.next.loading': 'Start the trip', 'd.next.transit': 'I have arrived',
       'vv.reprop': 'Offer another price', 'da.selfie': 'Live face scan',
+      'tr.share': 'Share tracking with the recipient', 'tr.tag': 'Delivery tracking', 'tr.title': 'Your delivery is on its way', 'tr.done': 'Delivery completed',
+      'tr.msg': 'Takaata · A delivery is coming for you: {r}. Driver {d} ({pl}). Track it live: {u} . Delivery code to give the driver only if everything is fine: {c}',
+      'tr.eta': 'Estimated arrival around {h}', 'tr.codeNote': 'Check the goods on arrival, then give the driver the delivery code you received by message.',
+      'tr.missing': 'This tracking is not available on this device. At launch, the link will work on every phone.', 'tr.discover': 'Discover Takaata',
+      'vo.listen': 'Listen', 'vo.test': 'Hello, I am the voice of Takaata. I will announce each step of your trip.',
+      'vo.open': 'Your request is posted. We are looking for a driver.', 'vo.offers': 'You have {n} driver offers. Choose the one that suits you.', 'vo.offer1': 'You have one driver offer.',
+      'vo.newOffer': 'New offer from a driver.',
+      'vo.assigned': '{d} accepted your trip. Your delivery code is: {c}.', 'vo.pickup': '{d} is on the way to you.',
+      'vo.loading': 'The driver has arrived. Loading in progress.', 'vo.transit': 'Your goods are on the way to the destination.',
+      'vo.arrived': 'The driver has arrived at the destination. Check your goods, then give the code: {c}.', 'vo.delivered': 'Delivery completed. Thank you for choosing Takaata.',
+      'vo.cancelled': 'Your trip is cancelled.', 'vo.req': 'New trip: {r}. Earnings {n} francs.', 'vo.dAssigned': 'The customer accepted. Tap I am leaving now.',
+      'pf.title': 'Ease of use', 'pf.voice': 'Voice announcements at each step', 'pf.big': 'Larger text', 'pf.data': 'Data saver (lighter photos)',
+      'pf.test': 'Test the voice', 'pf.note': 'The voice uses the phone’s language. Recorded announcements in Dioula and Nouchi can be added.',
+      'net.off': 'Offline: the app keeps working. Your actions will be sent as soon as the network is back.',
+      'rc.weekly': 'Every week', 'rc.days': 'Days', 'rc.time': 'Time', 'rc.note': 'The request is posted automatically 1 hour before, at the same price. You can pause it at any time.',
+      'rc.d1': 'Mon', 'rc.d2': 'Tue', 'rc.d3': 'Wed', 'rc.d4': 'Thu', 'rc.d5': 'Fri', 'rc.d6': 'Sat', 'rc.d0': 'Sun',
+      'rc.publish': 'Schedule every week', 'rc.noDay': 'Choose at least one day.', 'rc.saved': 'Trip scheduled: {d} at {h}',
+      'rc.title': 'Scheduled trips', 'rc.every': 'Every {d} at {h}', 'rc.next': 'Next trip: {d} at {h} · request posted 1 h before',
+      'rc.paused': 'Paused', 'rc.pause': 'Pause', 'rc.resume': 'Resume', 'rc.runNow': 'Post the next one now', 'rc.del': 'Delete',
+      'rc.deleted': 'Scheduled trip deleted', 'rc.published': 'Your scheduled trip has just been posted',
+      'cr.new': 'new customer', 'cr.title': 'How was the trip with {n}?',
+      'cr.ready': 'Ready on time', 'cr.polite': 'Polite', 'cr.packed': 'Well packed', 'cr.helped': 'Helped with loading',
+      'cr.wait': 'Long wait', 'cr.mismatch': 'Goods not as described', 'cr.rude': 'Rude', 'cr.payment': 'Payment issue',
+      'pay.invoice': 'Monthly invoice', 'me.m.business': 'Business account',
+      'bz.title': 'Business account', 'bz.pitch': 'For shops, wholesalers and companies that ship often.',
+      'bz.p1': 'Pay by monthly invoice, 30 days', 'bz.p2': 'Several employees order on the same account', 'bz.p3': 'Downloadable monthly statement for your accounting',
+      'bz.name': 'Company name', 'bz.ncc': 'Taxpayer number (NCC)', 'bz.nccPh': 'Optional', 'bz.commune': 'Head office district',
+      'bz.err': 'Enter the company name.', 'bz.create': 'Create business account', 'bz.created': 'Business account created',
+      'bz.invoice': 'Pay by monthly invoice (30 days)', 'bz.invoiceNote': 'At launch, monthly invoicing opens once Takaata has approved the file.',
+      'bz.month': 'This month', 'bz.toPay': 'On invoice', 'bz.csv': 'Download statement (CSV)', 'bz.members': 'Members',
+      'bz.owner': 'Account administrator', 'bz.member': 'Can order', 'bz.addMember': 'Add', 'bz.membersNote': 'Members order with their own number; trips are invoiced to the company.',
+      'rf.menu': 'Refer a driver', 'rf.code': 'Referral code (optional)', 'rf.bad': 'Unknown referral code. Check it or leave it empty.',
+      'rf.pitch': 'Invite a driver with your code. When they complete their first {n} trips, you receive {b}.', 'rf.tbd': 'a bonus (amount announced at launch)',
+      'rf.share': 'Invite on WhatsApp', 'rf.msg': 'Join Takaata as a partner driver: you keep 85% of every trip. Sign up with my code {c}: {u}',
+      'rf.list': 'My referrals', 'rf.none': 'No referrals yet.', 'rf.progress': '{n} / {m} trips', 'rf.done': 'Goal reached: bonus unlocked',
+      'rf.note': 'The bonus is credited to your balance after Takaata validates it.', 'rf.adminBonus': 'Driver referral bonus (after 10 trips)',
       'rc.other': 'Other amount', 'rc.ph': 'Amount', 'rc.go': 'Top up', 'rc.min': 'Minimum top-up: {p}.',
       'loc.share': 'Share my location', 'loc.none': 'GPS location unavailable',
       'loc.msgD': 'Takaata · I am on a trip {r} ({pl}). My location: {l}',
@@ -3133,7 +3224,192 @@
     }
   });
 
-  function currentRole() { return ROUTES[location.hash.slice(1)] || null; }
+  // ---------- SUIVI PARTAGÉ, VOIX, PETITE CONNEXION, RÉCURRENCE, NOTE DU CLIENT, ENTREPRISES, PARRAINAGE ----------
+
+  // Lien de suivi pour la personne qui réceptionne (sans application).
+  const trackUrl = o => `${location.origin}${location.pathname}#suivi/${encodeURIComponent(o.id)}`;
+  function trackMessage(o) {
+    return t('tr.msg', { r: `${commune(o.from).name} → ${commune(o.to).name}`, d: o.driver ? o.driver.name : '', pl: o.driver ? o.driver.plate : '', u: trackUrl(o), c: o.deliveryCode || '' });
+  }
+  function trackHeader() {
+    return `<header class="app-top"><div class="app-top-in"><a class="brand brand-sm" href="#"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">takaata</span></a>
+      <span class="track-tag mono">${esc(t('tr.tag'))}</span><button class="lang-toggle" type="button" data-lang-toggle>${TK.getLang() === 'fr' ? 'EN' : 'FR'}</button></div></header>`;
+  }
+  function trackView() {
+    const o = store.getOrder(decodeURIComponent(location.hash.slice(7)));
+    if (!o) return `<section class="app-sec"><h1 class="app-title">${esc(t('tr.title'))}</h1><p class="notice">${esc(t('tr.missing'))}</p></section>`;
+    const steps = ['assigned', 'pickup', 'loading', 'transit', 'arrived', 'delivered'];
+    const idx = steps.indexOf(o.status);
+    // Arrivée estimée : départ du chargement + trajet à 25 km/h de moyenne en ville.
+    const eta = o.timeline.transit ? o.timeline.transit + o.km / 25 * 3600000 : null;
+    return `<section class="app-sec">
+      <h1 class="app-title">${esc(t(o.status === 'delivered' ? 'tr.done' : 'tr.title'))}</h1>
+      <p class="sub">${route(o)} · <span class="mono">${ui.km(o.km)}</span></p>
+      <div class="order-top">${pill(o.status)}${eta && o.status === 'transit' ? `<span class="mono">${esc(t('tr.eta', { h: time(eta) }))}</span>` : ''}</div>
+      <div class="map-card">${ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
+      ${o.driver ? `<article class="driver-card"><span class="avatar avatar-lg" aria-hidden="true">${initials(o.driver.name)}</span>
+        <div class="driver-info"><small>${esc(t('t.driver'))}</small><b>${esc(o.driver.name)}</b><span><span class="stars">★</span> ${o.driver.rating.toFixed(1)} · ${esc(t('veh.' + o.vehicle))}</span></div>
+        <div class="plate mono">${esc(o.driver.plate)}</div></article>` : ''}
+      ${idx >= 0 ? `<ol class="timeline">${steps.slice(0, 5).map((st, i) => `<li class="${i < idx || o.status === 'delivered' ? 'is-done' : i === idx ? 'is-now' : ''}"><span>${esc(t('status.' + st))}</span><small class="mono">${o.timeline[st] ? time(o.timeline[st]) : ''}</small></li>`).join('')}</ol>` : ''}
+      ${o.status !== 'delivered' ? `<p class="notice">${esc(t('tr.codeNote'))}</p>` : ''}
+      <a class="btn btn-ghost btn-block" href="#">${esc(t('tr.discover'))}</a>
+    </section>`;
+  }
+
+  // Annonces vocales (synthèse vocale du téléphone) : utiles quand on lit difficilement.
+  const spokenDigits = c => String(c || '').split('').join(' ');
+  function speak(text, force) {
+    if (!('speechSynthesis' in window) || !(force || (store.state.settings || {}).voice)) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB'; u.rate = 0.95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    } catch (e) { /* synthèse indisponible */ }
+  }
+  function statusSentence(o) {
+    const offers = o.status === 'open' ? store.visibleOffers(o).length : 0;
+    if (o.status === 'open') return offers ? t(offers > 1 ? 'vo.offers' : 'vo.offer1', { n: offers }) : t('vo.open');
+    return t('vo.' + o.status, { d: o.driver ? o.driver.name : '', c: spokenDigits(o.deliveryCode) });
+  }
+  const voiceSeen = {};
+  function announceChanges() {
+    const role = currentRole();
+    for (const o of store.state.orders) {
+      const mineClient = o.owner === 'me' && role === 'client';
+      const mineDriver = o.driver && o.driver.me && role === 'driver';
+      const prev = voiceSeen[o.id];
+      voiceSeen[o.id] = o.status;
+      if (prev && prev !== o.status && mineClient) speak(statusSentence(o));
+      if (prev && prev !== o.status && mineDriver && o.status === 'assigned') speak(t('vo.dAssigned'));
+    }
+  }
+  function prefsBlock() {
+    const st = store.state.settings || {};
+    return `<fieldset class="prefs"><legend class="app-h">${esc(t('pf.title'))}</legend>
+      <label class="check"><input type="checkbox" id="pf-voice"${st.voice ? ' checked' : ''}><span>🔊 ${esc(t('pf.voice'))}</span></label>
+      <label class="check"><input type="checkbox" id="pf-big"${st.bigText ? ' checked' : ''}><span>${esc(t('pf.big'))}</span></label>
+      <label class="check"><input type="checkbox" id="pf-data"${st.dataSaver ? ' checked' : ''}><span>${esc(t('pf.data'))}</span></label>
+      <button type="button" class="btn btn-ghost btn-sm" data-act="voice-test">🔊 ${esc(t('pf.test'))}</button>
+      <p class="hint">${esc(t('pf.note'))}</p>
+    </fieldset>`;
+  }
+
+  // Petite connexion : bandeau hors ligne et économie de données (photos plus légères).
+  function offlineBanner() {
+    if (navigator.onLine !== false) return '';
+    return `<div class="offline-bar" role="status">${esc(t('net.off'))}</div>`;
+  }
+  const dataSaver = () => !!(store.state.settings || {}).dataSaver;
+  const photoSize = () => dataSaver() ? [480, 0.5] : [800, 0.6];
+
+  // Courses programmées chaque semaine.
+  const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+  const dayShort = d => t('rc.d' + d);
+  const daysLabel = days => DAY_ORDER.filter(d => days.includes(d)).map(dayShort).join(', ');
+  function weeklyPicker(d) {
+    const days = d.repeatDays || [];
+    return `<div class="weekly">
+      <div class="day-row" role="group" aria-label="${esc(t('rc.days'))}">${DAY_ORDER.map(n => `<button type="button" class="day-btn${days.includes(n) ? ' is-on' : ''}" aria-pressed="${days.includes(n)}" data-act="rep-day" data-n="${n}">${esc(dayShort(n))}</button>`).join('')}</div>
+      <label class="field field-inline"><span>${esc(t('rc.time'))}</span><input type="time" id="w-repeatTime" data-bind="repeatTime" value="${esc(d.repeatTime || '06:00')}"></label>
+      <p class="hint">${esc(t('rc.note'))}</p>
+    </div>`;
+  }
+  function recurringBlock() {
+    const list = store.myRecurring();
+    if (!list.length) return '';
+    return `<h2 class="app-h">${esc(t('rc.title'))}</h2><div class="stack">${list.map(r => `<article class="rec-card${r.active ? '' : ' is-paused'}">
+      <div class="rec-top"><b>${esc(commune(r.template.from).name)} → ${esc(commune(r.template.to).name)}</b><span class="mono">${fcfa(r.template.price)}</span></div>
+      <p class="hint">${esc(t('rc.every', { d: daysLabel(r.days), h: r.time }))} · ${esc(t('veh.' + r.template.vehicle))}</p>
+      ${r.active && r.nextAt ? `<p class="hint">${esc(t('rc.next', { d: date(r.nextAt), h: time(r.nextAt) }))}</p>` : `<p class="hint">${esc(t('rc.paused'))}</p>`}
+      <div class="btn-row">
+        <button class="btn btn-ghost btn-sm" type="button" data-act="rec-toggle" data-id="${r.id}">${esc(t(r.active ? 'rc.pause' : 'rc.resume'))}</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-act="rec-run" data-id="${r.id}">${esc(t('rc.runNow'))}</button>
+        <button class="link-btn danger" type="button" data-act="rec-del" data-id="${r.id}">${esc(t('rc.del'))}</button>
+      </div></article>`).join('')}</div>`;
+  }
+
+  // Note du client par le chauffeur, juste après la livraison.
+  const CR_GOOD = ['ready', 'polite', 'packed', 'helped'];
+  const CR_BAD = ['wait', 'mismatch', 'rude', 'payment'];
+  function clientBadge(o) {
+    const r = store.clientRatingOf(o);
+    return r ? ` · <span class="client-badge"><span class="stars">★</span> ${r.rating.toFixed(1)}</span>` : ` · <span class="client-badge is-new">${esc(t('cr.new'))}</span>`;
+  }
+  function clientRateCard(o) {
+    const n = view.crStars || 5, tags = n >= 4 ? CR_GOOD : CR_BAD, sel = view.crTags || [];
+    return `<section class="app-sec cr-card">
+      <h2 class="app-h">${esc(t('cr.title', { n: o.owner === 'me' ? t('role.client') : o.client || '' }))}</h2>
+      <div class="star-row" role="group" aria-label="${esc(t('cr.title', { n: '' }))}">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="star-btn${i <= n ? ' is-on' : ''}" data-act="cr-star" data-n="${i}" aria-label="${i}">★</button>`).join('')}</div>
+      <div class="tag-row">${tags.map(k => `<button type="button" class="tag${sel.includes(k) ? ' is-on' : ''}" aria-pressed="${sel.includes(k)}" data-act="cr-tag" data-tag="${k}">${esc(t('cr.' + k))}</button>`).join('')}</div>
+      <div class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="cr-send" data-id="${o.id}">${esc(t('rt.send'))}</button>
+        <button class="link-btn" type="button" data-act="cr-skip">${esc(t('au.later'))}</button></div>
+    </section>`;
+  }
+
+  // Compte entreprise : facture mensuelle, membres, relevé du mois.
+  function payChoices() {
+    const u = store.user();
+    return u && u.business && u.business.invoice ? PAYMENTS.concat('invoice') : PAYMENTS;
+  }
+  function monthOrders(u) {
+    const m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
+    return store.state.orders.filter(o => o.owner === 'me' && o.clientPhone === u.phone && o.status === 'delivered' && o.timeline.delivered >= m0.getTime());
+  }
+  function businessView(u, back) {
+    const b = u.business;
+    if (!b) return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('bz.title'))}</h1>
+      <p class="sub">${esc(t('bz.pitch'))}</p>
+      <ul class="ticks"><li>${esc(t('bz.p1'))}</li><li>${esc(t('bz.p2'))}</li><li>${esc(t('bz.p3'))}</li></ul>
+      <form class="auth-form" id="bizAccForm" novalidate>
+        <label class="field"><span>${esc(t('bz.name'))}</span><input id="bz-name" required autocomplete="organization"></label>
+        <label class="field"><span>${esc(t('bz.ncc'))}</span><input id="bz-ncc" placeholder="${esc(t('bz.nccPh'))}"></label>
+        <label class="field"><span>${esc(t('bz.commune'))}</span><select id="bz-commune">${ui.communeOptions('plateau')}</select></label>
+        <p class="field-error" id="bz-err" hidden>${esc(t('bz.err'))}</p>
+        <button class="btn btn-signal btn-block" type="submit">${esc(t('bz.create'))}</button>
+      </form></section>`;
+    const month = monthOrders(u), total = month.reduce((a, o) => a + o.price, 0), onInvoice = month.filter(o => o.payment === 'invoice');
+    return `<section class="app-sec">${back}<h1 class="app-title">${esc(b.name)}</h1>
+      <p class="sub">${b.ncc ? `${esc(t('bz.ncc'))} <span class="mono">${esc(b.ncc)}</span> · ` : ''}${esc(commune(b.commune || 'plateau').name)}</p>
+      <label class="check"><input type="checkbox" id="bz-invoice"${b.invoice ? ' checked' : ''}><span>${esc(t('bz.invoice'))}</span></label>
+      <p class="hint">${esc(t('bz.invoiceNote'))}</p>
+      <h2 class="app-h">${esc(t('bz.month'))}</h2>
+      <div class="me-stats"><div><b class="mono">${month.length}</b><small>${esc(t('me.trips'))}</small></div>
+        <div><b class="mono">${fmt(total)}</b><small>FCFA</small></div>
+        <div><b class="mono">${fmt(onInvoice.reduce((a, o) => a + o.price, 0))}</b><small>${esc(t('bz.toPay'))}</small></div></div>
+      <button class="btn btn-ghost btn-sm" type="button" data-act="biz-csv"${month.length ? '' : ' disabled'}>${esc(t('bz.csv'))}</button>
+      <h2 class="app-h">${esc(t('bz.members'))}</h2>
+      <ul class="ledger-list"><li><span><b>${esc(u.firstName)} ${esc(u.lastName)}</b><small>${esc(t('bz.owner'))}</small></span><span class="mono">${esc(fmtPhone(u.phone))}</span></li>
+        ${b.members.map(m => `<li><span><b class="mono">${esc(fmtPhone(m))}</b><small>${esc(t('bz.member'))}</small></span><button class="link-btn danger" type="button" data-act="biz-rm" data-phone="${m}">${esc(t('rc.del'))}</button></li>`).join('')}</ul>
+      <form class="rc-form" id="memberForm" novalidate>
+        <span class="phone-in"><b class="mono">+225</b><input id="bz-member" type="tel" inputmode="numeric" maxlength="14" placeholder="07 00 00 00 00" aria-label="${esc(t('bz.addMember'))}"></span>
+        <button class="btn btn-light btn-sm" type="submit">${esc(t('bz.addMember'))}</button>
+      </form>
+      <p class="hint">${esc(t('bz.membersNote'))}</p>
+    </section>`;
+  }
+  function downloadCsv(name, rows) {
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // Parrainage chauffeur : bonus après les 10 premières courses du filleul.
+  function driverInviteView(d, back) {
+    const code = store.driverCode(d), bonus = (store.state.settings || {}).driverRefBonus;
+    const list = store.referrals(d);
+    return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('rf.menu'))}</h1>
+      <p class="sub">${esc(t('rf.pitch', { n: store.REF_TRIPS, b: bonus ? fcfa(bonus) : t('rf.tbd') }))}</p>
+      <div class="invite-code"><b class="mono select-all">${esc(code)}</b>
+        <a class="btn btn-wa btn-sm" href="${waLink('', t('rf.msg', { c: code, u: `${location.origin}${location.pathname}#chauffeur` }))}" target="_blank" rel="noopener">${esc(t('rf.share'))}</a></div>
+      <h2 class="app-h">${esc(t('rf.list'))}</h2>
+      ${list.length ? `<ul class="ledger-list">${list.map(x => { const n = Math.min(x.trips || 0, store.REF_TRIPS); return `<li><span><b>${esc(x.firstName)} ${esc(x.lastName)}</b>
+        <small>${esc(t(n >= store.REF_TRIPS ? 'rf.done' : 'rf.progress', { n, m: store.REF_TRIPS }))}</small><span class="ref-bar"><i style="width:${n / store.REF_TRIPS * 100}%"></i></span></span>
+        <span class="pill pill-${n >= store.REF_TRIPS ? 'delivered' : 'open'}">${esc(t('st.' + x.status))}</span></li>`; }).join('')}</ul>` : `<p class="empty">${esc(t('rf.none'))}</p>`}
+      <p class="hint">${esc(t('rf.note'))}</p></section>`;
+  }
+
+  function currentRole() { return location.hash.startsWith('#suivi/') ? 'track' : ROUTES[location.hash.slice(1)] || null; }
 
   let lastHtml = '';
   function render() {
@@ -3156,12 +3432,14 @@
     if (role === 'client' && !signedIn) body = authView();
     else if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : view.name === 'me' ? meView() : view.name === 'booking' ? bookingView() : clientHome();
     else if (role === 'driver') body = store.driver() ? driverApp() : driverAuthView();
+    else if (role === 'track') body = trackView();
     else body = adminView();
 
     const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
     const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
     const call = (view.call && role !== 'admin' ? callOverlay() : '') + (role === 'driver' && store.driver() ? notifBanner() + (view.reqFull ? requestFull() : '') : '');
-    const html = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
+    document.body.classList.toggle('big-text', !!(store.state.settings || {}).bigText);
+    const html = `${offlineBanner()}${role === 'track' ? trackHeader() : header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
     // Ne remplace l'écran que s'il a changé : évite de perdre un appui pendant un rafraîchissement.
     if (html === lastHtml && root.innerHTML) return;
     lastHtml = html;
@@ -3285,6 +3563,27 @@
         break;
       }
       case 'rf-open': openRequest(id); render(); break;
+      case 'listen': { const o = store.getOrder(id); if (o) speak(statusSentence(o), true); break; }
+      case 'voice-test': speak(t('vo.test'), true); break;
+      case 'rep-day': {
+        const n = +b.dataset.n, d = view.draft;
+        d.repeatDays = (d.repeatDays || []).includes(n) ? d.repeatDays.filter(x => x !== n) : (d.repeatDays || []).concat(n);
+        render(); break;
+      }
+      case 'rec-toggle': store.toggleRecurring(id); break;
+      case 'rec-del': store.removeRecurring(id); ui.toast(t('rc.deleted')); break;
+      case 'rec-run': { const o = store.runRecurring(id); if (o) go('order', { orderId: o.id }); break; }
+      case 'cr-star': view.crStars = +b.dataset.n; view.crTags = []; render(); break;
+      case 'cr-tag': { const k = b.dataset.tag; view.crTags = (view.crTags || []).includes(k) ? view.crTags.filter(x => x !== k) : (view.crTags || []).concat(k); render(); break; }
+      case 'cr-send': store.rateClient(id, view.crStars || 5, view.crTags || []); view.rateClientFor = null; ui.toast(t('rt.thanks')); break;
+      case 'cr-skip': view.rateClientFor = null; render(); break;
+      case 'biz-rm': store.removeMember(b.dataset.phone); break;
+      case 'biz-csv': {
+        const u = store.user(), rows = [[t('ad.col.created'), 'N°', t('quote.from'), t('quote.to'), t('quote.vehicle'), t('w.payment'), 'FCFA']];
+        monthOrders(u).forEach(o => rows.push([dt(o.timeline.delivered), o.id, commune(o.from).name, commune(o.to).name, t('veh.' + o.vehicle), t('pay.' + o.payment), o.price]));
+        downloadCsv(`takaata-releve-${new Date().toISOString().slice(0, 7)}.csv`, rows);
+        break;
+      }
       case 'share-loc': { const o = store.getOrder(id); if (o) shareLocation(o, b.dataset.side); break; }
       case 'o-sos': view.sosFor = view.sosFor === id ? null : id; render(); break;
       case 'o-sos-no': view.sosFor = null; render(); break;
@@ -3298,7 +3597,7 @@
       case 'img-view': { const o = store.getOrder(id); if (o) imgView(o, b.dataset.k, +b.dataset.i); break; }
       case 'd-cam': {
         const which = b.dataset.which;
-        TK.media.camera({ title: t(which === 'start' ? 't.photosStart' : 't.photosEnd') }).then(shots => { if (shots.length) store.addPhotos(id, which, shots); });
+        TK.media.camera({ title: t(which === 'start' ? 't.photosStart' : 't.photosEnd'), size: dataSaver() ? 400 : 640 }).then(shots => { if (shots.length) store.addPhotos(id, which, shots); });
         break;
       }
       case 'items-tab': view.itemsTab = b.dataset.t; render(); break;
@@ -3523,6 +3822,10 @@
     if (el.id === 'adm-reason') { view.adm.reason = el.value; return; }
     if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
     if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
+    if (el.id === 'pf-voice') { store.setSetting('voice', el.checked); if (el.checked) speak(t('vo.test'), true); return; }
+    if (el.id === 'pf-big') { store.setSetting('bigText', el.checked); return; }
+    if (el.id === 'pf-data') { store.setSetting('dataSaver', el.checked); return; }
+    if (el.id === 'bz-invoice') { store.setBusiness({ invoice: el.checked }); return; }
     if (el.id === 'w-itemPhotos' && view.draft) {
       const files = Array.from(el.files || []);
       const d = view.draft;
@@ -3530,7 +3833,7 @@
       (async () => {
         for (const f of files) {
           if (d.itemPhotos.length >= ITEM_PHOTOS_MAX) break;
-          const img = await TK.media.fileToJpeg(f, 800, 0.6);
+          const img = await TK.media.fileToJpeg(f, ...photoSize());
           if (img) d.itemPhotos.push(img);
         }
         render();
@@ -3635,6 +3938,7 @@
       });
       const wa = document.getElementById('pr-wa').value.replace(/\D/g, '').replace(/^225(?=\d{10}$)/, '');
       if (!wa || PHONE_RE.test(wa)) store.setSetting('whatsapp', wa);
+      store.setSetting('driverRefBonus', Math.max(0, Math.round(+document.getElementById('pr-refbonus').value || 0)));
       ui.toast(t('ad.saved'));
       TKSite.refresh();
       return;
@@ -3686,6 +3990,17 @@
       const kg = loadKg(d);
       d.weight = kg ? `≈ ${fmt(kg)} kg` : '';
       if (d.service !== 'handling') Object.assign(d, { floorsFrom: 0, floorsTo: 0 });
+      // Course chaque semaine : on enregistre le modèle ; la demande est publiée automatiquement 1 h avant l'heure.
+      if (d.when === 'weekly') {
+        const days = d.repeatDays || [];
+        if (!days.length) { ui.toast(t('rc.noDay')); return; }
+        const tpl = JSON.parse(JSON.stringify(d));
+        delete tpl.voice; delete tpl.itemPhotos;
+        const r = store.addRecurring(tpl, days.slice().sort(), d.repeatTime || '06:00');
+        ui.toast(t('rc.saved', { d: daysLabel(r.days), h: r.time }));
+        go('orders', { draft: null, moreItems: false });
+        return;
+      }
       const o = store.createOrder(d);
       ui.toast(t('toast.published'));
       go('order', { orderId: o.id, draft: null, moreItems: false });
@@ -3712,6 +4027,15 @@
       view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
       if (res.ok) { view.counterFor = null; view.reqFull = null; ui.toast(t('nt.sent')); }
       render();
+    } else if (f.id === 'bizAccForm') {
+      const name = document.getElementById('bz-name').value.trim();
+      if (!name) { document.getElementById('bz-err').hidden = false; return; }
+      store.setBusiness({ name, ncc: document.getElementById('bz-ncc').value.trim(), commune: document.getElementById('bz-commune').value });
+      ui.toast(t('bz.created'));
+    } else if (f.id === 'memberForm') {
+      const ph = document.getElementById('bz-member').value.replace(/\D/g, '').replace(/^225(?=\d{10}$)/, '');
+      if (!PHONE_RE.test(ph)) { ui.toast(t('au.badPhone')); return; }
+      store.addMember(ph);
     } else if (f.id === 'rcForm') {
       const n = Math.round(Number(document.getElementById('rc-amount').value) || 0);
       if (n < store.RECHARGE_MIN) { ui.toast(t('rc.min', { p: fcfa(store.RECHARGE_MIN) })); return; }
@@ -3723,7 +4047,7 @@
       if (val.length !== 4) { view.codeErr = t('dc.four'); render(); return; }
       const res = store.submitDeliveryCode(id, val);
       if (res.photos) { view.codeErr = t('dc.needPhotos', { n: store.END_PHOTOS_MIN }); render(); return; }
-      if (res.ok) { view.codeErr = ''; ui.toast(t('dc.ok')); render(); return; }
+      if (res.ok) { view.codeErr = ''; view.rateClientFor = id; view.crStars = 5; view.crTags = []; ui.toast(t('dc.ok')); render(); return; }
       view.codeErr = res.locked ? '' : t('dc.bad', { n: res.left });
       render();
     } else if (f.id === 'repropForm') {
@@ -3765,9 +4089,13 @@
     if (currentRole() || wasApp) window.scrollTo({ top: 0 });
   });
 
+  window.addEventListener('online', () => { lastHtml = ''; render(); });
+  window.addEventListener('offline', () => { lastHtml = ''; render(); });
+
   // Re-rendu sur changement d'état, sauf pendant la saisie du formulaire de commande.
   let lastTrips = null;
   store.subscribe(() => {
+    announceChanges();
     const d = store.driver();
     if (d) {
       if (lastTrips != null && d.trips > lastTrips && d.earnings[0]) {
@@ -3787,7 +4115,9 @@
   setInterval(() => {
     const events = store.tick();
     events.forEach(ev => {
+      if (ev.type === 'recurring' && currentRole() === 'client') ui.toast(t('rc.published'));
       if (ev.type === 'offer' && currentRole() === 'client') {
+        speak(t('vo.newOffer'));
         const last = store.visibleOffers(ev.order).slice(-1)[0];
         if (!(view.name === 'order' && view.orderId === ev.order.id)) ui.toast(t('toast.newOffer', { n: last ? last.name : '' }));
       }
@@ -3796,6 +4126,7 @@
       if (ev.type === 'approved' && currentRole() === 'driver') ui.toast(t('da.approved'));
       if (ev.type === 'request') {
         requestNotif(ev.order);
+        if (currentRole() === 'driver') speak(t('vo.req', { r: `${commune(ev.order.from).name}, ${commune(ev.order.to).name}`, n: fmt(net(ev.order)) }));
         // Nouvelle demande : elle s'ouvre en plein écran si le chauffeur n'est pas déjà occupé.
         const busy = store.state.orders.some(x => x.driver && x.driver.me && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(x.status));
         if (currentRole() === 'driver' && view.dtab === 'jobs' && !view.reqFull && !busy && !document.querySelector('.media-ov')) openRequest(ev.order.id);
@@ -3808,6 +4139,7 @@
     const o = view.name === 'order' && store.getOrder(view.orderId);
     if (role === 'client' && !store.user() && view.auth.step === 'otp') render();
     else if (role === 'driver' && !store.driver() && view.dauth.step === 'otp') render();
+    else if (role === 'track') render();
     else if (role === 'driver' && view.reqFull) {
       // Le compte à rebours se met à jour sur place : redessiner l'écran chaque seconde ferait perdre des appuis.
       if (Date.now() >= view.reqFullUntil) { view.reqFull = null; render(); }

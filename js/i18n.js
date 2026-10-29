@@ -341,6 +341,11 @@
 
   // Site vitrine : textes alignés sur les fonctions de l'application.
   Object.assign(fr, {
+    'biz.b1': 'Compte entreprise : plusieurs employés commandent, tout est facturé à la société.',
+    'biz.b2': 'Paiement sur facture mensuelle à 30 jours et relevé du mois téléchargeable.',
+    'biz.b3': 'Courses programmées chaque semaine, publiées automatiquement au même prix.',
+    'how.s4': "Vous suivez la course étape par étape, et vous pouvez partager le suivi avec la personne qui réceptionne. À l'arrivée, vous donnez votre code de livraison à 4 chiffres.",
+    'faq.q9': 'Et si la connexion est mauvaise ?', 'faq.a9': "L'application reste utilisable hors connexion et propose une économie de données (photos plus légères). Elle peut aussi annoncer chaque étape à voix haute.",
     'nav.vivriers': 'Vivriers',
     'nav.safety': 'Sécurité',
     'hero.lead': 'Déménagement, meubles, marchandises, colis volumineux : décrivez votre chargement en photos ou par note vocale, proposez votre prix et choisissez parmi les offres de chauffeurs vérifiés.',
@@ -401,6 +406,11 @@
     'faq.a8': "Vous pouvez décrire votre chargement par note vocale ou en photos. Pour les vivriers, vous pouvez aussi réserver par WhatsApp : un agent Takaata s'occupe de tout."
   });
   Object.assign(en, {
+    'biz.b1': 'Business account: several employees order, everything is invoiced to the company.',
+    'biz.b2': 'Monthly invoice at 30 days and downloadable monthly statement.',
+    'biz.b3': 'Trips scheduled every week, posted automatically at the same price.',
+    'how.s4': 'Follow the trip step by step, and share tracking with whoever receives the goods. On arrival, give your 4-digit delivery code.',
+    'faq.q9': 'What if the connection is poor?', 'faq.a9': 'The app keeps working offline and offers a data saver (lighter photos). It can also announce each step out loud.',
     'nav.vivriers': 'Food produce',
     'nav.safety': 'Safety',
     'hero.lead': 'Moving house, furniture, goods, bulky parcels: describe your load with photos or a voice note, name your price and choose among offers from verified drivers.',

@@ -1,5 +1,5 @@
 // Service worker Takaata : l'app s'ouvre même sans réseau (coque mise en cache).
-const CACHE = 'takaata-v7';
+const CACHE = 'takaata-v8';
 const SHELL = [
   './', './index.html', './css/style.css', './manifest.webmanifest',
   './js/data.js', './js/i18n.js', './js/store.js', './js/ui.js', './js/vehicles.js', './js/site.js', './js/media.js', './js/app.js',

@@ -50,7 +50,8 @@
       reports: [],
       leads: [],
       pricing: null,
-      settings: { whatsapp: '' },  // numéro WhatsApp Takaata pour les réservations des commerçantes
+      settings: { whatsapp: '', driverRefBonus: 0, dataSaver: false },  // WhatsApp Takaata, bonus de parrainage chauffeur, économie de données
+      recurring: [],    // courses programmées chaque semaine (modèle de commande + jours + heure)
       events: [],
       trips: null,      // trajets « Vivriers vers Abidjan » publiés par les chauffeurs
       admin: { ownerHash: '', staff: [] },  // accès à la console : administrateur principal + collaborateurs       // journal d'usage pour les analyses (publication, offres, refus, annulations…)    // grille modifiée depuis l'Admin (null = grille du business plan)
@@ -291,12 +292,8 @@
     o.closedBy = by;
     track('delivered', o, { driver: o.driver && who(o.driver), price: o.price, by, durationMs: Date.now() - (o.timeline.assigned || o.createdAt) });
     o.timeline.delivered = Date.now();
-    // Le chauffeur note aussi le client (simulé : 5 étoiles).
-    const u = user();
-    if (o.owner === 'me' && u) {
-      u.rating = ((u.rating || 5) * (u.ratingCount || 0) + 5) / ((u.ratingCount || 0) + 1);
-      u.ratingCount = (u.ratingCount || 0) + 1;
-    }
+    // Le chauffeur note aussi le client. Chauffeur simulé : 5 étoiles ; chauffeur de cet appareil : il choisit après le code.
+    if (o.owner === 'me' && !(o.driver && o.driver.me)) applyClientRating(o.clientPhone, 5);
     if (o.driver && o.driver.me && drv()) {
       const c = o.commission;
       const d = drv();
@@ -346,6 +343,74 @@
     track('face_check', o || null, { driver: d.phone, step });
     emit();
   }
+
+  // --- note du client par le chauffeur ---
+  function applyClientRating(phone, stars) {
+    const u = phone && state.accounts[phone];
+    if (!u) return;
+    u.rating = ((u.rating || 5) * (u.ratingCount || 0) + stars) / ((u.ratingCount || 0) + 1);
+    u.ratingCount = (u.ratingCount || 0) + 1;
+  }
+  function rateClient(orderId, stars, tags) {
+    const o = getOrder(orderId);
+    if (!o || o.status !== 'delivered' || o.clientRating) return;
+    o.clientRating = { stars, tags: tags || [], at: Date.now() };
+    if (o.owner === 'me') applyClientRating(o.clientPhone, stars);
+    track('client_rated', o, { stars, tags: tags || [] });
+    emit();
+  }
+  // Note affichée aux chauffeurs : vraie note du compte, ou note simulée stable pour les clients de démonstration.
+  function clientRatingOf(o) {
+    const u = o.owner === 'me' && state.accounts[o.clientPhone];
+    if (u) return u.ratingCount ? { rating: u.rating, count: u.ratingCount } : null;
+    const r = rng('cr' + (o.client || o.id));
+    return { rating: Math.round((4.2 + r() * 0.8) * 10) / 10, count: 3 + Math.floor(r() * 60) };
+  }
+
+  // --- courses programmées chaque semaine ---
+  // Prochaine date (jours 0 = dimanche … 6 = samedi, heure « HH:MM ») après « from ».
+  function nextOccurrence(days, time, from = Date.now()) {
+    const [h, m] = time.split(':').map(Number);
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(from); d.setDate(d.getDate() + i); d.setHours(h, m, 0, 0);
+      if (days.includes(d.getDay()) && d.getTime() > from) return d.getTime();
+    }
+    return null;
+  }
+  const PUBLISH_BEFORE_MS = 60 * 60 * 1000;   // la demande est publiée 1 h avant l'heure prévue
+  function addRecurring(template, days, time) {
+    const r = { id: 'RC-' + newId().slice(3), template, days, time, active: true, createdAt: Date.now(), owner: state.session, created: [] };
+    r.nextAt = nextOccurrence(days, time);
+    state.recurring = (state.recurring || []).concat(r);
+    track('recurring_created', null, { days: days.length, vehicle: template.vehicle });
+    emit();
+    return r;
+  }
+  function toggleRecurring(id) { const r = (state.recurring || []).find(x => x.id === id); if (r) { r.active = !r.active; if (r.active) r.nextAt = nextOccurrence(r.days, r.time); emit(); } }
+  function removeRecurring(id) { state.recurring = (state.recurring || []).filter(x => x.id !== id); emit(); }
+  function runRecurring(id) {
+    const r = (state.recurring || []).find(x => x.id === id);
+    if (!r) return null;
+    const at = r.nextAt || nextOccurrence(r.days, r.time);
+    const when = new Date(at - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const o = createOrder(Object.assign(JSON.parse(JSON.stringify(r.template)), { when: 'later', whenAt: when, recurringId: r.id }));
+    r.created.unshift(o.id);
+    r.nextAt = nextOccurrence(r.days, r.time, at);
+    emit();
+    return o;
+  }
+  const myRecurring = () => (state.recurring || []).filter(r => r.owner === state.session);
+
+  // --- comptes entreprises ---
+  function setBusiness(info) { const u = user(); if (!u) return; u.business = Object.assign({ createdAt: Date.now(), members: [], invoice: true }, u.business, info); emit(); }
+  function addMember(phone) { const u = user(); if (!u || !u.business) return; if (!u.business.members.includes(phone)) u.business.members.push(phone); emit(); }
+  function removeMember(phone) { const u = user(); if (!u || !u.business) return; u.business.members = u.business.members.filter(p => p !== phone); emit(); }
+
+  // --- parrainage chauffeur ---
+  const REF_TRIPS = 10;
+  const driverCode = d => `${(d.firstName || '').normalize('NFD').replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase()}-${String(d.phone).slice(-4)}`;
+  function findDriverByCode(code) { return Object.values(state.driverAccounts).find(d => driverCode(d) === String(code).trim().toUpperCase()) || null; }
+  function referrals(d) { return Object.values(state.driverAccounts).filter(x => x.referredBy === d.phone); }
 
   function cancelInfo(o) {
     if (o.status === 'open') return { free: true };
@@ -453,6 +518,9 @@
           if (due.includes(s) && NEXT[o.status] === s) { advance(o.id); changed = true; }
         }
       }
+    }
+    for (const r of state.recurring || []) {
+      if (r.active && r.nextAt && now >= r.nextAt - PUBLISH_BEFORE_MS && r.owner === state.session) { runRecurring(r.id); changed = true; events.push({ type: 'recurring', r }); }
     }
     for (const trip of state.trips || []) {
       for (const b of trip.bookings) {
@@ -827,7 +895,9 @@
       get state() { return state; },
       subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
-      advance, confirmDelivery, repropose, submitDeliveryCode, faceCheck, orderSos, CODE_TRIES, END_PHOTOS_MIN, RECHARGE_MIN, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
+      advance, confirmDelivery, repropose, submitDeliveryCode, faceCheck, orderSos, rateClient, clientRatingOf,
+      addRecurring, toggleRecurring, removeRecurring, runRecurring, myRecurring, nextOccurrence,
+      setBusiness, addMember, removeMember, driverCode, findDriverByCode, referrals, REF_TRIPS, CODE_TRIES, END_PHOTOS_MIN, RECHARGE_MIN, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
       driverDecline, setOnline, onlineMsSince, seedAnalytics, clearDemoAnalytics,
       setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,

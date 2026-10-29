@@ -73,7 +73,7 @@
   function closeOverlay(el) { el.remove(); if (!document.querySelector('.media-ov')) document.body.classList.remove('media-open'); }
 
   // Appareil photo en direct, plusieurs prises. Résout avec la liste des photos (vide si annulé).
-  function camera({ title, max = 8, label = t('md.demoPhoto') } = {}) {
+  function camera({ title, max = 8, label = t('md.demoPhoto'), size = 640 } = {}) {
     return new Promise(async resolve => {
       const shots = [];
       const el = overlay('cam-ov');
@@ -100,13 +100,13 @@
         const m = b.dataset.m;
         if (m === 'close') { shots.length = 0; finish(); }
         if (m === 'done') finish();
-        if (m === 'shoot') { const v = el.querySelector('video'); if (v && v.videoWidth) { shots.push(toJpeg(v, 640, 0.6)); draw(true); } }
+        if (m === 'shoot') { const v = el.querySelector('video'); if (v && v.videoWidth) { shots.push(toJpeg(v, size, size < 640 ? 0.5 : 0.6)); draw(true); } }
         if (m === 'del') { shots.splice(+b.dataset.i, 1); draw(!!stream); }
         if (m === 'demo') { for (let i = 0; i < 2 && shots.length < max; i++) shots.push(demoImage(label, shots.length)); draw(false); }
       });
       el.addEventListener('change', async e => {
         const f = e.target.files && e.target.files[0];
-        if (f && shots.length < max) { const img = await fileToJpeg(f, 640, 0.6); if (img) shots.push(img); }
+        if (f && shots.length < max) { const img = await fileToJpeg(f, size, 0.6); if (img) shots.push(img); }
         draw(false);
       });
       try { stream = await openStream('environment'); draw(true); } catch (err) { draw(false); }
