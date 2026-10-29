@@ -52,6 +52,7 @@
       driverSession: null,
       reports: [],
       leads: [],
+      pricing: null,    // grille modifiée depuis l'Admin (null = grille du business plan)
       accounts: {},     // comptes clients par numéro (prototype local ; Firebase Auth au lancement)
       session: null,    // numéro du client connecté
       seeded: false
@@ -175,10 +176,10 @@
   function driverOffer(orderId, price) {
     const o = getOrder(orderId);
     const dd = drv();
-    if (!o || o.status !== 'open' || !dd || dd.status !== 'approved' || !dd.online) return { ok: false };
+    if (!o || o.status !== 'open' || !dd || dd.status !== 'approved' || dd.suspended || !dd.online) return { ok: false };
     if (o.offers.some(of => of.me && !of.declined)) return { ok: false };
     price = Math.max(o.minimum, Math.round(price));
-    const c = commission(price);
+    const c = commission(price, o.optionsPrice);
     if (available() < c) return { ok: false, missing: c - available() };
     hold(o.id, c);
     const d = drv();
@@ -199,7 +200,7 @@
     if (!offer) return;
     if (offer.me) {
       // Réservation déjà faite ; on vérifie qu'elle couvre bien le prix retenu.
-      if (!drv() || drv().holds[o.id] !== commission(offer.price)) return;
+      if (!drv() || drv().holds[o.id] !== commission(offer.price, o.optionsPrice)) return;
     } else {
       // Mon offre éventuelle n'est pas retenue : libération immédiate.
       const mine = o.offers.find(of => of.me && !of.declined);
@@ -208,7 +209,7 @@
     o.driver = offer;
     o.relay = relayFor(o.id);
     o.price = offer.price;
-    o.commission = commission(offer.price);
+    o.commission = commission(offer.price, o.optionsPrice);
     o.status = 'assigned';
     o.timeline.assigned = Date.now();
     o.sim = !offer.me;
@@ -393,6 +394,37 @@
   }
 
   function set(patch) { Object.assign(state, patch); emit(); }
+  // --- Admin : tarifs, suspension, litiges ---
+  const DEFAULT_PRICING = {
+    vehicles: Object.fromEntries(TK.VEHICLES.map(v => [v.id, { base: v.base, perKm: v.perKm, floor: v.floor }])),
+    helper: TK.OPTIONS.helper, floorFee: TK.OPTIONS.floor
+  };
+  function applyPricing() {
+    const pr = state.pricing || DEFAULT_PRICING;
+    TK.VEHICLES.forEach(v => Object.assign(v, pr.vehicles[v.id]));
+    TK.OPTIONS.helper = pr.helper;
+    TK.OPTIONS.floor = pr.floorFee;
+  }
+  function setPricing(pr) { state.pricing = pr; applyPricing(); emit(); }
+  function resetPricing() { state.pricing = null; applyPricing(); emit(); }
+  function suspendDriver(phone, on) {
+    const d = state.driverAccounts[phone];
+    if (!d) return;
+    d.suspended = on;
+    if (on) d.online = false;
+    emit();
+  }
+  function resolveReport(at) {
+    const r = state.reports.find(x => x.at === at);
+    if (r) { r.resolved = true; emit(); }
+  }
+  function adminCancel(orderId) {
+    const o = getOrder(orderId);
+    if (!o) return;
+    o.cancelledBy = 'support';
+    cancelOrder(orderId);
+  }
+
   function setDriver(patch) { if (drv()) { Object.assign(drv(), patch); emit(); } }
 
   // --- comptes chauffeurs ---
@@ -420,6 +452,7 @@
   function addLead(lead) { state.leads.push(Object.assign({ at: Date.now() }, lead)); emit(); }
 
   load();
+  applyPricing();
 
   window.TK = Object.assign(window.TK || {}, {
     store: {
@@ -428,6 +461,7 @@
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
       advance, confirmDelivery, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
+      setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
       held, available, NEXT, AUTO_CLOSE_MS, canCall
     }

@@ -22,7 +22,7 @@
     return Object.assign({
       need: 'moving', from: 'yopougon', to: '', fromDetail: '', toDetail: '', when: 'now', whenAt: '',
       vehicle: 'truck3t', service: 'transport', items: '', notes: '', itemsQty: {}, weightManual: '', weight: '',
-      floorsFrom: 0, floorsTo: 0, elevator: false, helpers: 1, packing: false, dismantle: false, price: null, payment: 'cash'
+      floorsFrom: 0, floorsTo: 0, elevator: false, helpers: 1, packing: false, dismantle: false, passengers: 0, price: null, payment: 'cash'
     }, patch);
   }
   function draftQuote(d) { return quote(d.vehicle, distanceKm(d.from, d.to), d); }
@@ -218,6 +218,11 @@
           <p class="hint">${esc(t('w.perHelper', { p: fcfa(TK.OPTIONS.helper) }))} · ${esc(t('w.perFloor', { p: fcfa(TK.OPTIONS.floor) }))}</p>
         </div>` : ''}
 
+        <fieldset class="chips"><legend class="app-h">${esc(t('w.passengers'))}</legend>
+          ${[0, 1, 2].map(n => `<label class="chip-radio"><input type="radio" name="passengers" id="w-pass-${n}" value="${n}" data-bind="passengers"${+d.passengers === n ? ' checked' : ''}><span>${esc(t(n ? 'w.passN' : 'w.pass0', { n }))}</span></label>`).join('')}
+        </fieldset>
+        <p class="hint">${esc(t('w.passHint'))}</p>
+
         <section class="items-pick">
           <h2 class="app-h">${esc(t('w.items'))} <small>${esc(t('w.optional'))}</small></h2>
           <ul class="pick-grid">${keys.map(pick).join('')}</ul>
@@ -258,6 +263,7 @@
               <div><dt>${esc(t('quote.vehicle'))}</dt><dd>${esc(t('veh.' + d.vehicle))}</dd></div>
               <div><dt>${esc(t('w.service'))}</dt><dd>${esc(t(d.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${d.service === 'handling' ? ` · ${d.helpers}` : ''}</dd></div>
               <div><dt>${esc(t('w.weight'))}</dt><dd class="mono">${kg ? `≈ ${fmt(kg)} kg` : '—'}</dd></div>
+              <div><dt>${esc(t('w.passengers'))}</dt><dd>${esc(t(+d.passengers ? 'w.passN' : 'w.pass0', { n: +d.passengers }))}</dd></div>
             </dl>
           </div>
           <div class="ticket-tear" aria-hidden="true"></div>
@@ -476,69 +482,6 @@
         ${o.status === 'arrived' ? `<p class="hint">${esc(t('d.waitClient'))}${o.autoConfirmAt ? ' ' + esc(t('d.autoIn', { t: mmss(o.autoConfirmAt - Date.now()) })) : ''}</p>
           ${o.owner === 'me' ? `<button class="link-btn demo-btn" type="button" data-act="confirm" data-id="${o.id}">${esc(t('d.clientConfirm'))}</button>` : ''}` : ''}
       </article>`;
-  }
-
-  // ---------- ADMIN ----------
-  function adminView() {
-    const s = store.state;
-    const delivered = s.orders.filter(o => o.status === 'delivered');
-    const gmv = delivered.reduce((a, o) => a + o.price, 0);
-    const comm = delivered.reduce((a, o) => a + o.commission, 0);
-    const drvAcc = store.driver();
-    const led = drvAcc ? drvAcc.ledger : [];
-    const recharges = led.filter(l => l.type === 'recharge').reduce((a, l) => a + l.amount, 0);
-    const debits = led.filter(l => l.type === 'debit').reduce((a, l) => a + l.amount, 0);
-    const expected = recharges - debits;
-    const kpis = [
-      ['a.done', fmt(delivered.length)], ['a.gmv', fcfa(gmv)], ['a.comm', fcfa(comm)],
-      ['a.avg', delivered.length ? fcfa(gmv / delivered.length) : '—'],
-      ['a.open', fmt(s.orders.filter(o => o.status === 'open').length)],
-      ['a.cancel', fmt(s.orders.filter(o => o.status === 'cancelled').length)]
-    ];
-    return `
-      <section class="app-sec">
-        <div class="kpis">${kpis.map(([k, v]) => `<div class="kpi"><small>${esc(t(k))}</small><b class="mono">${v}</b></div>`).join('')}</div>
-      </section>
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('a.orders'))}</h2>
-        ${s.orders.length ? `<div class="table-scroll"><table class="grid-table compact">
-          <thead><tr><th>${esc(t('a.colId'))}</th><th>${esc(t('a.colRoute'))}</th><th>${esc(t('a.colVehicle'))}</th><th>${esc(t('a.colPrice'))}</th><th>${esc(t('a.colPay'))}</th><th>${esc(t('a.colStatus'))}</th></tr></thead>
-          <tbody>${s.orders.map(o => `<tr><td class="mono">${esc(o.id)}</td><td>${route(o)}</td><td>${esc(t('veh.' + o.vehicle))}</td><td class="mono">${fmt(o.price)}</td><td>${esc(t('pay.' + o.payment))}</td><td>${pill(o.status)}</td></tr>`).join('')}</tbody>
-        </table></div>` : `<p class="empty">${esc(t('a.noOrders'))}</p>`}
-      </section>
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('a.drivers'))}</h2>
-        ${Object.values(s.driverAccounts).length ? `<ol class="ledger-list">${Object.values(s.driverAccounts).map(d => `
-          <li><span><b>${esc(d.firstName)} ${esc(d.lastName)}</b><small>${esc(fmtPhone(d.phone))} · ${esc(t('veh.' + d.vehicle))} · ${esc(d.plate)} · ${esc(t('da.licenseCats'))} ${esc(d.licenseCats.join(', '))}</small>
-            ${d.status === 'pending' ? `<span class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="a-review" data-ok="1" data-phone="${d.phone}">${esc(t('a.approve'))}</button>
-              <button class="btn btn-ghost btn-sm" type="button" data-act="a-review" data-ok="0" data-phone="${d.phone}">${esc(t('a.reject'))}</button></span>` : ''}</span>
-            <span class="pill pill-${d.status === 'approved' ? 'delivered' : d.status === 'rejected' ? 'cancelled' : 'open'}">${esc(t('st.' + d.status))}</span></li>`).join('')}</ol>`
-          : `<p class="empty">${esc(t('a.noDrivers'))}</p>`}
-      </section>
-      ${drvAcc ? `<section class="app-sec">
-        <h2 class="app-h">${esc(t('a.recon'))} · ${esc(drvAcc.firstName)} ${esc(drvAcc.lastName)}</h2>
-        <dl class="kv">
-          <div><dt>${esc(t('a.reconRecharges'))}</dt><dd class="mono">${fcfa(recharges)}</dd></div>
-          <div><dt>${esc(t('a.reconDebits'))}</dt><dd class="mono">− ${fcfa(debits)}</dd></div>
-          <div><dt>${esc(t('a.reconExpected'))}</dt><dd class="mono">${fcfa(expected)}</dd></div>
-          <div><dt>${esc(t('a.reconActual'))}</dt><dd class="mono">${fcfa(drvAcc.balance)}</dd></div>
-        </dl>
-        <p class="${expected === drvAcc.balance ? 'ok-line' : 'ko-line'}">${esc(t(expected === drvAcc.balance ? 'a.reconOk' : 'a.reconKo'))}</p>
-      </section>` : ''}
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('a.reports'))}</h2>
-        ${s.reports.length ? `<ol class="ledger-list">${s.reports.map(r => {
-          const o = r.orderId && store.getOrder(r.orderId);
-          return `<li><span><b class="mono">${esc(r.orderId || '—')}</b><small>${esc(r.text)}</small>
-            ${o && o.status === 'arrived' ? `<button class="btn btn-ghost btn-sm" type="button" data-act="support-close" data-id="${o.id}">${esc(t('a.supportClose'))}</button>` : ''}</span><span class="mono">${date(r.at)}</span></li>`;
-        }).join('')}</ol>` : `<p class="empty">${esc(t('a.noReports'))}</p>`}
-      </section>
-      <section class="app-sec">
-        ${view.confirmReset ? `<div class="confirm-inline"><p>${esc(t('a.resetConfirm'))}</p><div class="btn-row">
-          <button class="btn btn-danger btn-sm" type="button" data-act="reset-yes">${esc(t('a.resetYes'))}</button>
-          <button class="btn btn-ghost btn-sm" type="button" data-act="reset-no">${esc(t('a.resetNo'))}</button></div></div>`
-          : `<button class="link-btn danger" type="button" data-act="reset-ask">${esc(t('a.reset'))}</button>`}
-      </section>`;
   }
 
   // ---------- COMPTE CLIENT : inscription, connexion, « Moi » ----------
@@ -1028,7 +971,7 @@
   const DOCS_BY_STEP = { license: ['idFront', 'idBack', 'selfie', 'license'], vehicle: ['regCard', 'insurance', 'vehicleFront', 'vehicleCargo'] };
   const SIGNUP_STEPS = ['id', 'license', 'vehicle', 'payout', 'review'];
   const PLATE_RE = /^\d{1,4}\s?[A-Z]{2}\s?\d{2}$/i;
-  const net = price => price - commission(price);
+  const net = o => o.price - commission(o.price, o.optionsPrice);
   const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const ageOf = iso => { if (!iso) return null; const b = new Date(iso), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
   const future = iso => iso && new Date(iso).getTime() > Date.now();
@@ -1422,7 +1365,7 @@
 
   function requestCard(o) {
     const d = store.driver();
-    const c = commission(o.price);
+    const c = commission(o.price, o.optionsPrice);
     const avail = store.available();
     const sameVehicle = o.vehicle === d.vehicle;
     const msg = view.offerMsg[o.id];
@@ -1434,10 +1377,10 @@
         </div>
         <div class="earn-row">
           <div><small>${esc(t('dj.price'))}</small><b class="mono">${fcfa(o.price)}</b></div>
-          <div class="earn-net"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o.price))}</b></div>
+          <div class="earn-net"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o))}</b></div>
         </div>
         <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
-        <p class="request-meta">${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` · ${esc(t('w.helpers'))} ${o.helpers}` : ''} · ${esc(t('pay.' + o.payment))} · ${esc(t('d.minPrice', { p: fcfa(o.minimum) }))}</p>
+        <p class="request-meta">${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` · ${esc(t('w.helpers'))} ${o.helpers}` : ''} · ${esc(t('pay.' + o.payment))} · ${esc(t(+o.passengers ? 'w.passN' : 'w.pass0', { n: +o.passengers || 0 }))} · ${esc(t('d.minPrice', { p: fcfa(o.minimum) }))}</p>
         ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
           ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
           ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
@@ -1452,6 +1395,337 @@
       </article>`;
   }
 
+
+  // ---------- ADMIN : console d'opérations (organisation type back-office Huolala) ----------
+  TK.addStrings({
+    fr: {
+      'ad.brand': 'Opérations', 'ad.city': 'Ville', 'ad.dash': 'Tableau de bord', 'ad.orders': 'Commandes', 'ad.drivers': 'Chauffeurs',
+      'ad.clients': 'Clients', 'ad.finance': 'Finance', 'ad.support': 'Litiges et support', 'ad.pricing': 'Tarifs',
+      'ad.today': 'Commandes du jour', 'ad.active': 'En cours', 'ad.delivered': 'Livrées', 'ad.gmv': 'Montant des courses livrées',
+      'ad.comm': 'Commissions Takaata', 'ad.online': 'Chauffeurs en ligne', 'ad.registered': 'Clients inscrits', 'ad.cancelled': 'Annulées',
+      'ad.todo': 'À traiter', 'ad.todoDrivers': '{n} dossier(s) chauffeur à valider', 'ad.todoDisputes': '{n} litige(s) ouvert(s)',
+      'ad.todoOpen': '{n} demande(s) sans chauffeur', 'ad.nothing': 'Rien à traiter pour le moment.', 'ad.recent': 'Dernières commandes',
+      'ad.all': 'Toutes', 'ad.f.open': 'En attente', 'ad.f.active': 'En cours', 'ad.f.delivered': 'Livrées', 'ad.f.cancelled': 'Annulées', 'ad.f.dispute': 'Litiges',
+      'ad.search': 'Rechercher : n°, commune, client, chauffeur', 'ad.none': 'Aucun résultat.',
+      'ad.col.created': 'Créée', 'ad.col.client': 'Client', 'ad.col.driver': 'Chauffeur', 'ad.col.name': 'Nom', 'ad.col.phone': 'Téléphone',
+      'ad.col.plate': 'Plaque', 'ad.col.rating': 'Note', 'ad.col.trips': 'Courses', 'ad.col.balance': 'Solde', 'ad.col.status': 'Statut',
+      'ad.col.since': 'Inscrit le', 'ad.col.spent': 'Dépensé', 'ad.col.held': 'Réservé', 'ad.col.topups': 'Recharges', 'ad.col.fees': 'Frais débités',
+      'ad.col.payouts': 'Reversements', 'ad.col.recon': 'Rapprochement',
+      'ad.close': 'Fermer', 'ad.detail': 'Détail', 'ad.priceDetail': 'Détail du prix', 'ad.transport': 'Transport', 'ad.options': 'Options (aides, étages)',
+      'ad.fee': 'Commission (15 % du transport)', 'ad.driverNet': 'Net chauffeur', 'ad.cancel': 'Annuler la commande', 'ad.validate': 'Valider la livraison',
+      'ad.load': 'Chargement', 'ad.service': 'Service', 'ad.passengers': 'Personnes à bord', 'ad.timeline': 'Suivi',
+      'ad.t.pending': 'À valider', 'ad.t.approved': 'Validés', 'ad.t.rejected': 'Refusés', 'ad.t.suspended': 'Suspendus',
+      'ad.identity': 'Identité', 'ad.docs': 'Documents', 'ad.photos': '{n} photo(s)', 'ad.vehicle': 'Véhicule', 'ad.payout': 'Paiement des gains',
+      'ad.approve': 'Valider le dossier', 'ad.reject': 'Refuser', 'ad.rejectReason': 'Motif du refus', 'ad.suspend': 'Suspendre', 'ad.unsuspend': 'Réactiver',
+      'ad.r1': 'Document illisible', 'ad.r2': 'Permis non valable pour ce véhicule', 'ad.r3': 'Assurance ou visite technique expirée', 'ad.r4': 'Informations incohérentes',
+      'ad.online1': 'En ligne', 'ad.offline1': 'Hors ligne', 'ad.suspended1': 'Suspendu',
+      'ad.finComm': 'Commissions encaissées', 'ad.finOptions': 'Options reversées aux chauffeurs', 'ad.finTopups': 'Recharges des soldes',
+      'ad.finBalances': 'Soldes prépayés des chauffeurs', 'ad.finBalancesNote': 'Argent des chauffeurs : ce n’est pas du chiffre d’affaires.',
+      'ad.finPayouts': 'Reversements Mobile Money', 'ad.ok': 'Concordant', 'ad.ko': 'Écart',
+      'ad.open1': 'Ouvert', 'ad.resolved1': 'Résolu', 'ad.resolve': 'Marquer comme résolu', 'ad.noReports': 'Aucun litige ni message.',
+      'ad.priceNote': 'Les nouveaux tarifs s’appliquent aux prochaines commandes. La commission reste de 15 % sur la part transport.',
+      'ad.base': 'Base', 'ad.perKm': 'Par km', 'ad.floor': 'Plancher', 'ad.helper': 'Prix par aide', 'ad.floorFee': 'Prix par étage sans ascenseur',
+      'ad.save': 'Enregistrer les tarifs', 'ad.saved': 'Tarifs enregistrés', 'ad.defaults': 'Revenir à la grille du business plan',
+      'ad.example': 'Exemple : {v}, 10 km → {p}', 'ad.reset': 'Réinitialiser la démo', 'ad.demo': 'Prototype : la console affiche les données de cet appareil.'
+    },
+    en: {
+      'ad.brand': 'Operations', 'ad.city': 'City', 'ad.dash': 'Dashboard', 'ad.orders': 'Orders', 'ad.drivers': 'Drivers',
+      'ad.clients': 'Customers', 'ad.finance': 'Finance', 'ad.support': 'Disputes & support', 'ad.pricing': 'Pricing',
+      'ad.today': 'Orders today', 'ad.active': 'In progress', 'ad.delivered': 'Delivered', 'ad.gmv': 'Value of delivered trips',
+      'ad.comm': 'Takaata commissions', 'ad.online': 'Drivers online', 'ad.registered': 'Registered customers', 'ad.cancelled': 'Cancelled',
+      'ad.todo': 'To do', 'ad.todoDrivers': '{n} driver application(s) to review', 'ad.todoDisputes': '{n} open dispute(s)',
+      'ad.todoOpen': '{n} request(s) without a driver', 'ad.nothing': 'Nothing to handle right now.', 'ad.recent': 'Latest orders',
+      'ad.all': 'All', 'ad.f.open': 'Waiting', 'ad.f.active': 'In progress', 'ad.f.delivered': 'Delivered', 'ad.f.cancelled': 'Cancelled', 'ad.f.dispute': 'Disputes',
+      'ad.search': 'Search: no., district, customer, driver', 'ad.none': 'No results.',
+      'ad.col.created': 'Created', 'ad.col.client': 'Customer', 'ad.col.driver': 'Driver', 'ad.col.name': 'Name', 'ad.col.phone': 'Phone',
+      'ad.col.plate': 'Plate', 'ad.col.rating': 'Rating', 'ad.col.trips': 'Trips', 'ad.col.balance': 'Balance', 'ad.col.status': 'Status',
+      'ad.col.since': 'Joined', 'ad.col.spent': 'Spent', 'ad.col.held': 'Held', 'ad.col.topups': 'Top-ups', 'ad.col.fees': 'Fees debited',
+      'ad.col.payouts': 'Payouts', 'ad.col.recon': 'Reconciliation',
+      'ad.close': 'Close', 'ad.detail': 'Details', 'ad.priceDetail': 'Price breakdown', 'ad.transport': 'Transport', 'ad.options': 'Options (helpers, floors)',
+      'ad.fee': 'Commission (15% of transport)', 'ad.driverNet': 'Driver net', 'ad.cancel': 'Cancel the order', 'ad.validate': 'Validate delivery',
+      'ad.load': 'Load', 'ad.service': 'Service', 'ad.passengers': 'People on board', 'ad.timeline': 'Tracking',
+      'ad.t.pending': 'To review', 'ad.t.approved': 'Approved', 'ad.t.rejected': 'Refused', 'ad.t.suspended': 'Suspended',
+      'ad.identity': 'Identity', 'ad.docs': 'Documents', 'ad.photos': '{n} photo(s)', 'ad.vehicle': 'Vehicle', 'ad.payout': 'Earnings payout',
+      'ad.approve': 'Approve application', 'ad.reject': 'Refuse', 'ad.rejectReason': 'Reason for refusal', 'ad.suspend': 'Suspend', 'ad.unsuspend': 'Reactivate',
+      'ad.r1': 'Unreadable document', 'ad.r2': 'Licence not valid for this vehicle', 'ad.r3': 'Insurance or roadworthiness test expired', 'ad.r4': 'Inconsistent information',
+      'ad.online1': 'Online', 'ad.offline1': 'Offline', 'ad.suspended1': 'Suspended',
+      'ad.finComm': 'Commissions collected', 'ad.finOptions': 'Options paid to drivers', 'ad.finTopups': 'Balance top-ups',
+      'ad.finBalances': 'Drivers’ prepaid balances', 'ad.finBalancesNote': 'Drivers’ money: this is not revenue.',
+      'ad.finPayouts': 'Mobile Money payouts', 'ad.ok': 'Matches', 'ad.ko': 'Gap',
+      'ad.open1': 'Open', 'ad.resolved1': 'Resolved', 'ad.resolve': 'Mark as resolved', 'ad.noReports': 'No disputes or messages.',
+      'ad.priceNote': 'New rates apply to the next orders. The commission stays at 15% of the transport part.',
+      'ad.base': 'Base', 'ad.perKm': 'Per km', 'ad.floor': 'Minimum', 'ad.helper': 'Price per helper', 'ad.floorFee': 'Price per floor without lift',
+      'ad.save': 'Save rates', 'ad.saved': 'Rates saved', 'ad.defaults': 'Back to the business plan rates',
+      'ad.example': 'Example: {v}, 10 km → {p}', 'ad.reset': 'Reset demo', 'ad.demo': 'Prototype: the console shows the data stored on this device.'
+    }
+  });
+
+  const AD_MODULES = [
+    ['dash', 'M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],
+    ['orders', 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4'],
+    ['drivers', 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
+    ['clients', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-4-5.6'],
+    ['finance', 'M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2'],
+    ['support', 'M4 13a8 8 0 0 1 16 0v4h-4v-5h4M4 12h4v5H4z'],
+    ['pricing', 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01']
+  ];
+  if (!view.adm) view.adm = { mod: 'dash', filter: 'all', q: '', order: null, driver: null, client: null, dtab: 'pending', reason: 'ad.r1' };
+
+  const isDispute = o => o.disputed && o.status === 'arrived';
+  const clientName = o => {
+    if (o.owner !== 'me') return o.client || '—';
+    const u = store.account(o.clientPhone);
+    return u ? `${u.firstName} ${u.lastName}` : t('role.client');
+  };
+  const dt = ts => `${date(ts)} ${time(ts)}`;
+  const statusPill = d => d.suspended ? `<span class="pill pill-cancelled">${esc(t('ad.suspended1'))}</span>`
+    : `<span class="pill pill-${d.status === 'approved' ? 'delivered' : d.status === 'rejected' ? 'cancelled' : 'open'}">${esc(t('st.' + d.status))}</span>`;
+
+  function adminView() {
+    const a = view.adm;
+    const s = store.state;
+    const pendingDrivers = Object.values(s.driverAccounts).filter(d => d.status === 'pending').length;
+    const openDisputes = s.reports.filter(r => !r.resolved).length;
+    const badge = { drivers: pendingDrivers, support: openDisputes };
+    const nav = AD_MODULES.map(([m, icon]) => `<button type="button" class="adm-nav${a.mod === m ? ' is-on' : ''}" data-act="adm-mod" data-mod="${m}"${a.mod === m ? ' aria-current="page"' : ''}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}"/></svg><span>${esc(t('ad.' + m))}</span>${badge[m] ? `<b class="adm-badge">${badge[m]}</b>` : ''}</button>`).join('');
+    const body = { dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
+    return `<div class="adm">
+      <aside class="adm-side">
+        <div class="adm-brand"><span class="brand-mark" aria-hidden="true"></span><div><b>takaata</b><small>${esc(t('ad.brand'))}</small></div></div>
+        <label class="adm-city"><span>${esc(t('ad.city'))}</span><select id="adm-city"><option>Abidjan</option></select></label>
+        <nav class="adm-navs" aria-label="${esc(t('role.admin'))}">${nav}</nav>
+        <div class="adm-foot">
+          ${view.confirmReset ? `<div class="confirm-inline"><p>${esc(t('a.resetConfirm'))}</p><div class="btn-row">
+            <button class="btn btn-danger btn-sm" type="button" data-act="reset-yes">${esc(t('a.resetYes'))}</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-act="reset-no">${esc(t('a.resetNo'))}</button></div></div>`
+            : `<button class="link-btn danger" type="button" data-act="reset-ask">${esc(t('ad.reset'))}</button>`}
+          <small>${esc(t('ad.demo'))}</small>
+        </div>
+      </aside>
+      <section class="adm-main">
+        <header class="adm-top"><h1 class="adm-title">${esc(t('ad.' + a.mod))}</h1><span class="mono adm-date">${esc(new Date().toLocaleDateString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))}</span></header>
+        ${body}
+      </section>
+      ${admDrawer()}
+    </div>`;
+  }
+
+  function tile(label, value, sub, tone) {
+    return `<div class="adm-tile${tone ? ' tone-' + tone : ''}"><small>${esc(label)}</small><b class="mono">${value}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>`;
+  }
+
+  function orderTable(list) {
+    if (!list.length) return `<p class="empty">${esc(t('ad.none'))}</p>`;
+    return `<div class="table-scroll"><table class="grid-table compact adm-table">
+      <thead><tr><th>${esc(t('a.colId'))}</th><th>${esc(t('ad.col.created'))}</th><th>${esc(t('a.colRoute'))}</th><th>${esc(t('a.colVehicle'))}</th><th>${esc(t('ad.col.client'))}</th><th>${esc(t('ad.col.driver'))}</th><th>${esc(t('a.colPrice'))}</th><th>${esc(t('a.colStatus'))}</th></tr></thead>
+      <tbody>${list.map(o => `<tr class="adm-row" data-act="adm-order" data-id="${o.id}" tabindex="0">
+        <td class="mono">${esc(o.id)}</td><td>${dt(o.createdAt)}</td><td>${route(o)}</td><td>${esc(t('veh.' + o.vehicle))}</td>
+        <td>${esc(clientName(o))}</td><td>${o.driver ? esc(o.driver.name) : '—'}</td><td class="mono">${fmt(o.price)}</td>
+        <td>${isDispute(o) ? `<span class="pill pill-cancelled">${esc(t('ad.f.dispute'))}</span>` : pill(o.status)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+
+  function admDash() {
+    const s = store.state, os = s.orders;
+    const today = os.filter(o => o.createdAt >= today0());
+    const delivered = os.filter(o => o.status === 'delivered');
+    const drivers = Object.values(s.driverAccounts);
+    const todo = [
+      [drivers.filter(d => d.status === 'pending').length, 'ad.todoDrivers', 'drivers'],
+      [s.reports.filter(r => !r.resolved).length, 'ad.todoDisputes', 'support'],
+      [os.filter(o => o.status === 'open').length, 'ad.todoOpen', 'orders']
+    ].filter(([n]) => n);
+    return `
+      <div class="adm-tiles">
+        ${tile(t('ad.today'), fmt(today.length))}
+        ${tile(t('ad.active'), fmt(os.filter(o => ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status)).length))}
+        ${tile(t('ad.delivered'), fmt(delivered.length), '', 'ok')}
+        ${tile(t('ad.cancelled'), fmt(os.filter(o => o.status === 'cancelled').length), '', 'ko')}
+        ${tile(t('ad.gmv'), fcfa(delivered.reduce((x, o) => x + o.price, 0)))}
+        ${tile(t('ad.comm'), fcfa(delivered.reduce((x, o) => x + (o.commission || 0), 0)), '', 'accent')}
+        ${tile(t('ad.online'), `${drivers.filter(d => d.online).length} / ${drivers.filter(d => d.status === 'approved').length}`)}
+        ${tile(t('ad.registered'), fmt(Object.keys(s.accounts).length))}
+      </div>
+      <div class="adm-grid2">
+        <section class="adm-card"><h2 class="app-h">${esc(t('ad.todo'))}</h2>
+          ${todo.length ? `<ul class="adm-todo">${todo.map(([n, k, m]) => `<li><button type="button" data-act="adm-mod" data-mod="${m}"><b class="mono">${n}</b><span>${esc(t(k, { n }))}</span><i aria-hidden="true">›</i></button></li>`).join('')}</ul>`
+            : `<p class="empty">${esc(t('ad.nothing'))}</p>`}
+        </section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('ad.recent'))}</h2>${orderTable(os.slice().sort((x, y) => y.createdAt - x.createdAt).slice(0, 6))}</section>
+      </div>`;
+  }
+
+  function admOrders() {
+    const a = view.adm;
+    const q = a.q.trim().toLowerCase();
+    const F = {
+      all: () => true, open: o => o.status === 'open', active: o => ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) && !isDispute(o),
+      delivered: o => o.status === 'delivered', cancelled: o => o.status === 'cancelled', dispute: isDispute
+    };
+    const os = store.state.orders.slice().sort((x, y) => y.createdAt - x.createdAt);
+    const list = os.filter(F[a.filter]).filter(o => !q || [o.id, commune(o.from).name, commune(o.to).name, clientName(o), o.driver && o.driver.name].join(' ').toLowerCase().includes(q));
+    return `
+      <div class="adm-filters">
+        <div class="tag-row adm-chips">${Object.keys(F).map(k => `<button type="button" class="tag${a.filter === k ? ' is-on' : ''}" data-act="adm-filter" data-f="${k}">${esc(t(k === 'all' ? 'ad.all' : 'ad.f.' + k))} <span class="mono">${os.filter(F[k]).length}</span></button>`).join('')}</div>
+        <label class="field adm-search"><span class="sr-only">${esc(t('ad.search'))}</span><input id="adm-q" type="search" value="${esc(a.q)}" placeholder="${esc(t('ad.search'))}"></label>
+      </div>
+      ${orderTable(list)}`;
+  }
+
+  function admDrivers() {
+    const a = view.adm;
+    const all = Object.values(store.state.driverAccounts);
+    const T = { pending: d => d.status === 'pending', approved: d => d.status === 'approved' && !d.suspended, rejected: d => d.status === 'rejected', suspended: d => d.suspended };
+    const list = all.filter(T[a.dtab]);
+    return `
+      <div class="tag-row adm-chips">${Object.keys(T).map(k => `<button type="button" class="tag${a.dtab === k ? ' is-on' : ''}" data-act="adm-dtab" data-t="${k}">${esc(t('ad.t.' + k))} <span class="mono">${all.filter(T[k]).length}</span></button>`).join('')}</div>
+      ${list.length ? `<div class="table-scroll"><table class="grid-table compact adm-table">
+        <thead><tr><th>${esc(t('ad.col.name'))}</th><th>${esc(t('ad.col.phone'))}</th><th>${esc(t('a.colVehicle'))}</th><th>${esc(t('ad.col.plate'))}</th><th>${esc(t('ad.col.rating'))}</th><th>${esc(t('ad.col.trips'))}</th><th>${esc(t('ad.col.balance'))}</th><th>${esc(t('ad.col.status'))}</th></tr></thead>
+        <tbody>${list.map(d => `<tr class="adm-row" data-act="adm-driver" data-phone="${d.phone}" tabindex="0">
+          <td><b>${esc(d.firstName)} ${esc(d.lastName)}</b></td><td class="mono">${esc(fmtPhone(d.phone))}</td><td>${esc(t('veh.' + d.vehicle))}</td>
+          <td class="mono">${esc(d.plate)}</td><td>${store.driverRating(d).toFixed(1)}</td><td class="mono">${d.trips}</td><td class="mono">${fmt(d.balance)}</td>
+          <td>${statusPill(d)} ${d.online ? `<span class="pill pill-delivered">${esc(t('ad.online1'))}</span>` : ''}</td></tr>`).join('')}</tbody>
+      </table></div>` : `<p class="empty">${esc(t('ad.none'))}</p>`}`;
+  }
+
+  function admClients() {
+    const s = store.state;
+    const list = Object.values(s.accounts);
+    if (!list.length) return `<p class="empty">${esc(t('ad.none'))}</p>`;
+    return `<div class="table-scroll"><table class="grid-table compact adm-table">
+      <thead><tr><th>${esc(t('ad.col.name'))}</th><th>${esc(t('ad.col.phone'))}</th><th>${esc(t('ad.col.since'))}</th><th>${esc(t('ad.col.trips'))}</th><th>${esc(t('ad.col.spent'))}</th><th>${esc(t('ad.col.rating'))}</th></tr></thead>
+      <tbody>${list.map(u => {
+        const os = s.orders.filter(o => o.clientPhone === u.phone);
+        const done = os.filter(o => o.status === 'delivered');
+        return `<tr class="adm-row" data-act="adm-client" data-phone="${u.phone}" tabindex="0"><td><b>${esc(u.firstName)} ${esc(u.lastName)}</b></td><td class="mono">${esc(fmtPhone(u.phone))}</td>
+          <td>${date(u.createdAt)}</td><td class="mono">${done.length} / ${os.length}</td><td class="mono">${fmt(done.reduce((x, o) => x + o.price, 0))}</td>
+          <td>${u.ratingCount ? (u.rating || 5).toFixed(1) : '—'}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+  }
+
+  function admFinance() {
+    const s = store.state;
+    const delivered = s.orders.filter(o => o.status === 'delivered');
+    const drivers = Object.values(s.driverAccounts);
+    const sumL = (d, type) => d.ledger.filter(l => l.type === type).reduce((x, l) => x + l.amount, 0);
+    const rows = drivers.map(d => {
+      const topups = sumL(d, 'recharge'), fees = sumL(d, 'debit');
+      const held = Object.values(d.holds || {}).reduce((x, n) => x + n, 0);
+      return { d, topups, fees, held, payouts: sumL(d, 'payout'), ok: topups - fees === d.balance };
+    });
+    return `
+      <div class="adm-tiles">
+        ${tile(t('ad.finComm'), fcfa(delivered.reduce((x, o) => x + (o.commission || 0), 0)), '', 'accent')}
+        ${tile(t('ad.finOptions'), fcfa(delivered.reduce((x, o) => x + Math.min(o.optionsPrice || 0, o.price), 0)))}
+        ${tile(t('ad.finTopups'), fcfa(rows.reduce((x, r) => x + r.topups, 0)))}
+        ${tile(t('ad.finBalances'), fcfa(drivers.reduce((x, d) => x + d.balance, 0)), t('ad.finBalancesNote'))}
+        ${tile(t('ad.finPayouts'), fcfa(rows.reduce((x, r) => x + r.payouts, 0)))}
+      </div>
+      ${rows.length ? `<div class="table-scroll"><table class="grid-table compact adm-table">
+        <thead><tr><th>${esc(t('ad.col.driver'))}</th><th>${esc(t('ad.col.topups'))}</th><th>${esc(t('ad.col.fees'))}</th><th>${esc(t('ad.col.balance'))}</th><th>${esc(t('ad.col.held'))}</th><th>${esc(t('ad.col.payouts'))}</th><th>${esc(t('ad.col.recon'))}</th></tr></thead>
+        <tbody>${rows.map(r => `<tr><td><b>${esc(r.d.firstName)} ${esc(r.d.lastName)}</b></td><td class="mono">${fmt(r.topups)}</td><td class="mono">${fmt(r.fees)}</td>
+          <td class="mono">${fmt(r.d.balance)}</td><td class="mono">${fmt(r.held)}</td><td class="mono">${fmt(r.payouts)}</td>
+          <td><span class="pill pill-${r.ok ? 'delivered' : 'cancelled'}">${esc(t(r.ok ? 'ad.ok' : 'ad.ko'))}</span></td></tr>`).join('')}</tbody>
+      </table></div>` : `<p class="empty">${esc(t('ad.none'))}</p>`}`;
+  }
+
+  function admSupport() {
+    const s = store.state;
+    if (!s.reports.length) return `<p class="empty">${esc(t('ad.noReports'))}</p>`;
+    return `<ol class="adm-list">${s.reports.map(r => {
+      const o = r.orderId && store.getOrder(r.orderId);
+      return `<li class="adm-card adm-report${r.resolved ? ' is-done' : ''}">
+        <div class="adm-report-top"><span class="pill pill-${r.resolved ? 'delivered' : 'open'}">${esc(t(r.resolved ? 'ad.resolved1' : 'ad.open1'))}</span>
+          ${o ? `<button type="button" class="link-btn mono" data-act="adm-order" data-id="${o.id}">${esc(o.id)} · ${route(o)}</button>` : ''}<span class="mono adm-date">${dt(r.at)}</span></div>
+        <p>${esc(r.text)}</p>
+        <div class="btn-row">
+          ${o && o.status === 'arrived' ? `<button class="btn btn-signal btn-sm" type="button" data-act="support-close" data-id="${o.id}">${esc(t('ad.validate'))}</button>` : ''}
+          ${r.resolved ? '' : `<button class="btn btn-ghost btn-sm" type="button" data-act="adm-resolve" data-at="${r.at}">${esc(t('ad.resolve'))}</button>`}
+        </div></li>`;
+    }).join('')}</ol>`;
+  }
+
+  function admPricing() {
+    const ex = TK.quote('van1t', 10, null).reference;
+    return `<form class="adm-card" id="pricingForm">
+      <div class="table-scroll"><table class="grid-table compact adm-table">
+        <thead><tr><th>${esc(t('a.colVehicle'))}</th><th>${esc(t('ad.base'))}</th><th>${esc(t('ad.perKm'))}</th><th>${esc(t('ad.floor'))}</th></tr></thead>
+        <tbody>${VEHICLES.map(v => `<tr><th scope="row">${esc(t('veh.' + v.id))}</th>
+          ${['base', 'perKm', 'floor'].map(k => `<td><input class="adm-num mono" type="number" min="0" step="50" id="pr-${v.id}-${k}" value="${v[k]}" aria-label="${esc(t('veh.' + v.id))} · ${esc(t('ad.' + k))}"></td>`).join('')}</tr>`).join('')}</tbody>
+      </table></div>
+      <div class="row-2">
+        <label class="field"><span>${esc(t('ad.helper'))}</span><input class="mono" type="number" min="0" step="50" id="pr-helper" value="${TK.OPTIONS.helper}"></label>
+        <label class="field"><span>${esc(t('ad.floorFee'))}</span><input class="mono" type="number" min="0" step="50" id="pr-floor" value="${TK.OPTIONS.floor}"></label>
+      </div>
+      <p class="hint">${esc(t('ad.priceNote'))} ${esc(t('ad.example', { v: t('veh.van1t'), p: fcfa(ex) }))}</p>
+      <div class="btn-row">
+        <button class="btn btn-signal" type="submit">${esc(t('ad.save'))}</button>
+        <button class="btn btn-ghost" type="button" data-act="adm-defaults">${esc(t('ad.defaults'))}</button>
+      </div>
+    </form>`;
+  }
+
+  // Fiche latérale : commande, chauffeur ou client.
+  function admDrawer() {
+    const a = view.adm;
+    let title = '', body = '';
+    const kv = rows => `<dl class="kv">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+    if (a.order) {
+      const o = store.getOrder(a.order);
+      if (!o) { a.order = null; return ''; }
+      const fee = o.commission != null ? o.commission : commission(o.price, o.optionsPrice);
+      title = `${o.id}`;
+      body = `<p class="adm-drawer-route"><b>${route(o)}</b> ${isDispute(o) ? `<span class="pill pill-cancelled">${esc(t('ad.f.dispute'))}</span>` : pill(o.status)}</p>
+        ${kv([[t('ad.col.created'), dt(o.createdAt)], [t('ad.col.client'), `${esc(clientName(o))}${o.clientPhone ? ` · <span class="mono">${esc(fmtPhone(o.clientPhone))}</span>` : ''}`],
+          [t('ad.col.driver'), o.driver ? `${esc(o.driver.name)} · <span class="mono">${esc(o.driver.plate)}</span>` : '—'], [t('a.colVehicle'), esc(t('veh.' + o.vehicle))],
+          [t('ad.service'), esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport')) + (o.service === 'handling' ? ` · ${o.helpers}` : '')],
+          [t('ad.passengers'), String(+o.passengers || 0)], [t('ad.load'), esc(o.items || '—') + (o.weight ? ` · ${esc(o.weight)}` : '')],
+          [t('w.payment'), esc(t('pay.' + o.payment))]])}
+        <h3 class="app-h">${esc(t('ad.priceDetail'))}</h3>
+        ${kv([[t('ad.transport'), `<span class="mono">${fcfa(Math.max(0, o.price - (o.optionsPrice || 0)))}</span>`], [t('ad.options'), `<span class="mono">${fcfa(Math.min(o.optionsPrice || 0, o.price))}</span>`],
+          [t('t.agreed'), `<b class="mono">${fcfa(o.price)}</b>`], [t('ad.fee'), `<span class="mono">${fcfa(fee)}</span>`], [t('ad.driverNet'), `<b class="mono pos">${fcfa(o.price - fee)}</b>`]])}
+        ${Object.keys(o.timeline).length ? `<h3 class="app-h">${esc(t('ad.timeline'))}</h3>
+        ${kv(Object.entries(o.timeline).map(([k, v]) => [t('status.' + k), `<span class="mono">${dt(v)}</span>`]))}` : ''}
+        <div class="btn-row">
+          ${o.status === 'arrived' ? `<button class="btn btn-signal btn-sm" type="button" data-act="support-close" data-id="${o.id}">${esc(t('ad.validate'))}</button>` : ''}
+          ${['open', 'assigned', 'pickup', 'loading', 'transit'].includes(o.status) ? `<button class="btn btn-danger btn-sm" type="button" data-act="adm-cancel" data-id="${o.id}">${esc(t('ad.cancel'))}</button>` : ''}
+        </div>`;
+    } else if (a.driver) {
+      const d = store.driverAccount(a.driver);
+      if (!d) { a.driver = null; return ''; }
+      const docRow = (label, n, iso) => { const [k, cls] = docStatus(iso); return [label, `${esc(t('ad.photos', { n: n || 0 }))}${iso ? ` · ${date(new Date(iso).getTime())} <span class="pill pill-${cls}">${esc(t(k))}</span>` : ''}`]; };
+      title = `${d.firstName} ${d.lastName}`;
+      body = `<p class="adm-drawer-route">${statusPill(d)} <span class="pill">${esc(t(d.online ? 'ad.online1' : 'ad.offline1'))}</span></p>
+        <h3 class="app-h">${esc(t('ad.identity'))}</h3>
+        ${kv([[t('ad.col.phone'), `<span class="mono">${esc(fmtPhone(d.phone))}</span>`], [t('da.birth'), esc(t('da.age', { n: ageOf(d.birth) }))],
+          [t('da.idType'), `${esc(t('da.' + d.idType))} · <span class="mono">${esc(d.idNumber)}</span>`], [t('da.commune'), esc(commune(d.commune).name)]])}
+        <h3 class="app-h">${esc(t('ad.docs'))}</h3>
+        ${kv([docRow(t('da.idFront') + ' / ' + t('da.idBack'), (d.docs.idFront || 0) + (d.docs.idBack || 0)), docRow(t('da.selfie'), d.docs.selfie),
+          docRow(`${t('da.license')} · ${d.licenseCats.join(', ')}`, d.docs.license, d.licenseExp), docRow(t('da.regCard'), d.docs.regCard),
+          docRow(t('da.insurance'), d.docs.insurance, d.insuranceExp), docRow(t('dm.inspection'), 0, d.inspectionExp),
+          docRow(t('da.vehicleFront') + ' / ' + t('da.vehicleCargo'), (d.docs.vehicleFront || 0) + (d.docs.vehicleCargo || 0))])}
+        <h3 class="app-h">${esc(t('ad.vehicle'))}</h3>
+        ${kv([[t('da.vehType'), esc(t('veh.' + d.vehicle))], [t('da.plate'), `<span class="plate mono">${esc(d.plate)}</span>`], [t('da.brand'), `${esc(d.brand)} · ${esc(d.year)}`],
+          [t('ad.payout'), `${esc(t('pay.' + d.payOp))} · <span class="mono">${esc(fmtPhone(d.payPhone))}</span>`]])}
+        ${d.status === 'pending' ? `<div class="adm-actions">
+          <button class="btn btn-signal btn-sm" type="button" data-act="adm-approve" data-phone="${d.phone}">${esc(t('ad.approve'))}</button>
+          <label class="field field-inline"><span>${esc(t('ad.rejectReason'))}</span><select id="adm-reason">${['ad.r1', 'ad.r2', 'ad.r3', 'ad.r4'].map(k => `<option value="${k}"${a.reason === k ? ' selected' : ''}>${esc(t(k))}</option>`).join('')}</select></label>
+          <button class="btn btn-ghost btn-sm" type="button" data-act="adm-reject" data-phone="${d.phone}">${esc(t('ad.reject'))}</button></div>` : ''}
+        ${d.status === 'approved' ? `<div class="btn-row"><button class="btn ${d.suspended ? 'btn-signal' : 'btn-danger'} btn-sm" type="button" data-act="adm-suspend" data-phone="${d.phone}">${esc(t(d.suspended ? 'ad.unsuspend' : 'ad.suspend'))}</button></div>` : ''}`;
+    } else if (a.client) {
+      const u = store.account(a.client);
+      if (!u) { a.client = null; return ''; }
+      title = `${u.firstName} ${u.lastName}`;
+      body = `${kv([[t('ad.col.phone'), `<span class="mono">${esc(fmtPhone(u.phone))}</span>`], [t('ad.col.since'), date(u.createdAt)], [t('ad.col.rating'), u.ratingCount ? (u.rating || 5).toFixed(1) : '—']])}
+        <h3 class="app-h">${esc(t('ad.orders'))}</h3>${orderTable(store.state.orders.filter(o => o.clientPhone === u.phone))}`;
+    } else return '';
+    return `<div class="adm-drawer-bg" data-act="adm-close"></div>
+      <aside class="adm-drawer" role="dialog" aria-label="${esc(title)}">
+        <header><h2>${esc(title)}</h2><button type="button" class="sheet-x" data-act="adm-close" aria-label="${esc(t('ad.close'))}">✕</button></header>
+        <div class="adm-drawer-body">${body}</div>
+      </aside>`;
+  }
 
   // ---------- APPELS MASQUÉS ----------
   TK.addStrings({
@@ -1538,7 +1812,7 @@
     const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
     const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
     const call = view.call && role !== 'admin' ? callOverlay() : '';
-    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
+    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
 
     Object.entries(keep).forEach(([id, v]) => {
       const el = document.getElementById(id);
@@ -1561,6 +1835,14 @@
   }
 
   // ---------- événements ----------
+  root.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr[data-act]')) { e.preventDefault(); e.target.click(); }
+  });
+  // Échap ferme la fiche Admin, même quand le focus est sorti de l'app.
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && currentRole() === 'admin' && (view.adm.order || view.adm.driver || view.adm.client)) { Object.assign(view.adm, { order: null, driver: null, client: null }); render(); }
+  });
+
   function setVehicle(id) {
     view.draft.vehicle = id;
     render();
@@ -1581,6 +1863,19 @@
     switch (b.dataset.act) {
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
+      case 'adm-mod': Object.assign(view.adm, { mod: b.dataset.mod, order: null, driver: null, client: null }); dgo(); break;
+      case 'adm-filter': view.adm.filter = b.dataset.f; render(); break;
+      case 'adm-dtab': view.adm.dtab = b.dataset.t; render(); break;
+      case 'adm-order': Object.assign(view.adm, { order: id, driver: null, client: null }); render(); break;
+      case 'adm-driver': Object.assign(view.adm, { driver: b.dataset.phone, order: null, client: null }); render(); break;
+      case 'adm-client': Object.assign(view.adm, { client: b.dataset.phone, order: null, driver: null }); render(); break;
+      case 'adm-close': Object.assign(view.adm, { order: null, driver: null, client: null }); render(); break;
+      case 'adm-approve': store.reviewDriver(b.dataset.phone, true); break;
+      case 'adm-reject': store.reviewDriver(b.dataset.phone, false, t(document.getElementById('adm-reason').value)); break;
+      case 'adm-suspend': { const d = store.driverAccount(b.dataset.phone); store.suspendDriver(d.phone, !d.suspended); break; }
+      case 'adm-cancel': store.adminCancel(id); break;
+      case 'adm-resolve': store.resolveReport(+b.dataset.at); break;
+      case 'adm-defaults': store.resetPricing(); ui.toast(t('ad.saved')); break;
       case 'call': view.call = { orderId: id, side: b.dataset.side }; render(); break;
       case 'hangup': view.call = null; render(); break;
       case 'dtab': view.dtab = b.dataset.tab; view.dmeSub = ''; view.confirmLogout = false; view.supportSent = false; dgo(); break;
@@ -1673,7 +1968,7 @@
       case 'report-open': view.reportOpen = true; render(); break;
       case 'again': {
         const o = store.getOrder(id);
-        const keepKeys = ['need', 'from', 'to', 'fromDetail', 'toDetail', 'vehicle', 'service', 'notes', 'itemsQty', 'weightManual', 'floorsFrom', 'floorsTo', 'elevator', 'helpers', 'payment'];
+        const keepKeys = ['need', 'from', 'to', 'fromDetail', 'toDetail', 'vehicle', 'service', 'notes', 'itemsQty', 'weightManual', 'floorsFrom', 'floorsTo', 'elevator', 'helpers', 'passengers', 'payment'];
         const patch = {};
         keepKeys.forEach(k => { if (o[k] !== undefined) patch[k] = JSON.parse(JSON.stringify(o[k])); });
         go('wizard', { step: 4, draft: newDraft(Object.assign(patch, { price: o.price })) });
@@ -1727,6 +2022,7 @@
   }
 
   root.addEventListener('input', e => {
+    if (e.target.id === 'adm-q') { view.adm.q = e.target.value; render(); return; }
     if (e.target.dataset.dbind && e.target.matches('input:not([type=checkbox]):not([type=radio]), textarea')) { dBind(e.target); return; }
     if (e.target.matches('input[type=text], input:not([type]), textarea, input[type=number], input[type=datetime-local]')) bindValue(e.target);
   });
@@ -1739,6 +2035,7 @@
       if (!el.matches('input[type=text], input[type=tel], input[type=number], input:not([type])')) render();
       return;
     }
+    if (el.id === 'adm-reason') { view.adm.reason = el.value; return; }
     if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
     if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
     if (el.dataset.act === 'photos') {
@@ -1776,6 +2073,16 @@
     e.preventDefault();
     const f = e.target;
     if (f.id === 'authForm') { submitAuth(); return; }
+    if (f.id === 'pricingForm') {
+      const num = id => Math.max(0, Math.round(+document.getElementById(id).value || 0));
+      store.setPricing({
+        vehicles: Object.fromEntries(VEHICLES.map(v => [v.id, { base: num(`pr-${v.id}-base`), perKm: num(`pr-${v.id}-perKm`), floor: num(`pr-${v.id}-floor`) }])),
+        helper: num('pr-helper'), floorFee: num('pr-floor')
+      });
+      ui.toast(t('ad.saved'));
+      TKSite.refresh();
+      return;
+    }
     if (f.id === 'dAuthForm') { submitDriverAuth(); return; }
     if (f.id === 'dSupportForm') {
       const text = document.getElementById('dSupportText').value.trim();

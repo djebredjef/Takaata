@@ -96,7 +96,8 @@
     };
   }
 
-  const commission = price => Math.round(price * COMMISSION_RATE);
+  // Commission prélevée sur la part transport seulement : les options (aides, étages) reviennent entièrement au chauffeur.
+  const commission = (price, options = 0) => Math.round(Math.max(0, price - options) * COMMISSION_RATE);
 
   window.TK = Object.assign(window.TK || {}, {
     COMMISSION_RATE, VEHICLES, OPTIONS, COMMUNES, NEEDS, PAYMENTS, STATUSES,
