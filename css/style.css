@@ -904,3 +904,25 @@ html.sheet-open { overflow: hidden; }
 .wallet-main b small { font-size: 14px; color: var(--band-muted); }
 .wallet-alert .link-btn { color: inherit; text-decoration: underline; padding: 0 0 0 6px; }
 .me-stats .plate { font-size: 12px; justify-self: center; }
+
+/* appels masqués + code de prise en charge */
+.call-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.call-btn { gap: 8px; color: var(--leaf); border-color: var(--leaf); font-weight: 700; }
+.call-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.call-row small { color: var(--muted); font-size: 12.5px; flex: 1; min-width: 160px; }
+.call-ended { display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); }
+.call-ended small { color: var(--muted); }
+.call-ended .link-btn { color: var(--signal); justify-self: start; padding: 0; }
+.code-box { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; padding: 14px; border-radius: var(--r); background: var(--surface); border: 1.5px dashed var(--signal); }
+.code-box span { font-weight: 700; }
+.code-box b { grid-row: span 2; font-size: 30px; letter-spacing: .12em; color: var(--signal); }
+.code-box small { color: var(--muted); font-size: 12.5px; }
+.code-box-driver { background: var(--signal-soft); }
+.call-sheet { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); background: rgba(6, 20, 25, .72); animation: fade .2s ease-out; }
+.call-card { width: 100%; max-width: 360px; display: grid; gap: 10px; justify-items: center; text-align: center; padding: 24px 20px; border-radius: 18px; background: var(--band); color: var(--band-ink); }
+.call-card b { font-size: 20px; }
+.call-card .hint { color: var(--band-muted); }
+.call-avatar { width: 72px; height: 72px; font-size: 24px; background: var(--signal); color: var(--signal-ink); }
+.call-relay { display: grid; gap: 2px; padding: 10px 14px; border-radius: var(--r-sm); background: rgba(255, 255, 255, .08); }
+.call-relay small { color: var(--band-muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+.call-relay span { font-size: 17px; }

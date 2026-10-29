@@ -88,6 +88,19 @@
     save();
   }
 
+  // Numéro à 10 chiffres pour les clients simulés.
+  const demoPhone = r => ['07', '05', '01'][Math.floor(r() * 3)] + String(Math.floor(r() * 1e8)).padStart(8, '0');
+
+  // Numéro relais (appel masqué) : seul numéro que chauffeur et client voient l'un de l'autre.
+  // Prototype : numéro fictif ; au lancement, attribué par l'opérateur téléphonique / le fournisseur d'appels masqués.
+  function relayFor(orderId) {
+    const r = rng('relay' + orderId);
+    return '27 20 ' + [0, 0, 0].map(() => String(Math.floor(r() * 90) + 10)).join(' ');
+  }
+  // Appels possibles de l'attribution du chauffeur jusqu'à la fin de la course.
+  const CALLABLE = ['assigned', 'pickup', 'loading', 'transit', 'arrived'];
+  function canCall(o) { return !!(o && o.driver && CALLABLE.includes(o.status)); }
+
   // --- commandes ---
   function buildOrder(draft, owner) {
     const km = distanceKm(draft.from, draft.to);
@@ -96,7 +109,8 @@
     const o = Object.assign({}, draft, {
       id: newId(), owner, createdAt: Date.now(), km,
       transportPrice: q.transport, optionsPrice: q.options, reference: q.reference, minimum: q.minimum,
-      price, status: 'open', offers: [], plannedOffers: [], timeline: {}, photos: { start: 0, end: 0 }
+      price, status: 'open', offers: [], plannedOffers: [], timeline: {}, photos: { start: 0, end: 0 },
+      clientPhone: owner === 'me' ? state.session : demoPhone(rng(draft.from + draft.to + draft.client))
     });
     if (owner === 'me') o.plannedOffers = planOffers(o);
     return o;
@@ -192,6 +206,7 @@
       if (mine) { mine.declined = true; if (drv()) release(o.id); }
     }
     o.driver = offer;
+    o.relay = relayFor(o.id);
     o.price = offer.price;
     o.commission = commission(offer.price);
     o.status = 'assigned';
@@ -414,7 +429,7 @@
       advance, confirmDelivery, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
-      held, available, NEXT, AUTO_CLOSE_MS
+      held, available, NEXT, AUTO_CLOSE_MS, canCall
     }
   });
 })();

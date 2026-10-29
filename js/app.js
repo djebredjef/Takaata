@@ -215,6 +215,7 @@
             ${counter('floorsTo', t('w.floorsTo'), d.floorsTo, 0, 20)}
           </div>
           <label class="check"><input type="checkbox" id="w-elevator" data-bind="elevator"${d.elevator ? ' checked' : ''}><span>${esc(t('w.elevator'))}</span></label>
+          <p class="hint">${esc(t('w.perHelper', { p: fcfa(TK.OPTIONS.helper) }))} · ${esc(t('w.perFloor', { p: fcfa(TK.OPTIONS.floor) }))}</p>
         </div>` : ''}
 
         <section class="items-pick">
@@ -356,7 +357,8 @@
           </div>
           <div class="plate mono" aria-label="Immatriculation">${esc(dv.plate)}</div>
         </article>
-        <p class="phone-line">${esc(t('t.call'))} : <span class="mono select-all">${esc(dv.phone)}</span></p>
+        ${callBlock(o, 'client')}
+        ${['assigned', 'pickup'].includes(o.status) && o.clientPhone ? `<div class="code-box"><span>${esc(t('cv.clientCodeT'))}</span><b class="mono">${esc(o.clientPhone.slice(-4))}</b><small>${esc(t('cv.clientCodeS'))}</small></div>` : ''}
 
         <ol class="timeline">${steps.map((s, i) => `
           <li class="${i < idx || o.status === 'delivered' ? 'is-done' : i === idx ? 'is-now' : ''}">
@@ -380,6 +382,7 @@
 
         ${o.sim && store.NEXT[o.status] ? `<button class="link-btn demo-btn" type="button" data-act="demo-next" data-id="${o.id}">${esc(t('t.demoNext'))} →</button>` : ''}
 
+        ${['delivered', 'cancelled'].includes(o.status) ? afterCall() : ''}
         ${o.status === 'delivered' && o.closedBy === 'auto' ? `<p class="notice">${esc(t('dl.auto'))}</p>` : ''}
         ${o.status === 'delivered' && o.closedBy === 'support' ? `<p class="notice">${esc(t('dl.support'))}</p>` : ''}
         ${o.status === 'delivered' ? rateBlock(o) + receipt(o) : ''}
@@ -456,6 +459,10 @@
         <div class="map-card">${ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
         <p class="request-items">${esc(o.items || '—')}</p>
         <p class="request-meta">${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}${o.fromDetail ? ` · ${esc(o.fromDetail)}` : ''}</p>
+        ${callBlock(o, 'driver')}
+        ${o.status === 'pickup' ? `<div class="code-box code-box-driver">
+          <span>${esc(t('cv.verifyT'))}</span><b class="mono">${esc((o.clientPhone || '').slice(-4))}</b>
+          <small>${esc(t('cv.verifyS'))}</small></div>` : ''}
         <p class="notice">${esc(o.payment === 'cash'
           ? t('d.cashHint', { p: fcfa(o.price), n: fcfa(o.price - o.commission) })
           : t('d.mmHint', { m: t('pay.' + o.payment), n: fcfa(o.price - o.commission) }))}</p>
@@ -1445,6 +1452,64 @@
       </article>`;
   }
 
+
+  // ---------- APPELS MASQUÉS ----------
+  TK.addStrings({
+    fr: {
+      'cv.call': 'Appeler', 'cv.callDriver': 'Appeler le chauffeur', 'cv.callClient': 'Appeler le client',
+      'cv.masked': 'Appel masqué : votre numéro n’est pas communiqué.',
+      'cv.relay': 'Numéro relais Takaata', 'cv.calling': 'Appel de {n} via le numéro relais…', 'cv.hangup': 'Raccrocher',
+      'cv.demo': 'Prototype : aucun appel n’est passé. Au lancement, l’appel passera par un numéro relais fourni par l’opérateur.',
+      'cv.ended': 'La course est terminée : l’appel direct n’est plus possible.', 'cv.support': 'Contacter le service client',
+      'cv.clientCodeT': 'Code de prise en charge', 'cv.clientCodeS': 'Les 4 derniers chiffres de votre numéro. Le chauffeur vous les demandera à son arrivée.',
+      'cv.verifyT': 'Vérifiez le client', 'cv.verifyS': 'Demandez au client de confirmer les 4 derniers chiffres de son numéro avant de charger.',
+      'd.next.pickup': 'Client confirmé · commencer le chargement'
+    },
+    en: {
+      'cv.call': 'Call', 'cv.callDriver': 'Call the driver', 'cv.callClient': 'Call the customer',
+      'cv.masked': 'Masked call: your number is not shared.',
+      'cv.relay': 'Takaata relay number', 'cv.calling': 'Calling {n} through the relay number…', 'cv.hangup': 'Hang up',
+      'cv.demo': 'Prototype: no call is placed. At launch, calls go through a relay number provided by the operator.',
+      'cv.ended': 'The trip is over: direct calls are no longer possible.', 'cv.support': 'Contact customer service',
+      'cv.clientCodeT': 'Pickup code', 'cv.clientCodeS': 'The last 4 digits of your number. The driver will ask for them on arrival.',
+      'cv.verifyT': 'Check the customer', 'cv.verifyS': 'Ask the customer to confirm the last 4 digits of their number before loading.',
+      'd.next.pickup': 'Customer confirmed · start loading'
+    }
+  });
+
+  // Bouton d'appel : actif seulement pendant la course, toujours via le numéro relais.
+  function callBlock(o, side) {
+    if (!store.canCall(o)) return '';
+    return `<div class="call-row">
+      <button type="button" class="btn btn-light call-btn" data-act="call" data-id="${o.id}" data-side="${side}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/></svg>
+        ${esc(t(side === 'client' ? 'cv.callDriver' : 'cv.callClient'))}</button>
+      <small>${esc(t('cv.masked'))}</small>
+    </div>`;
+  }
+
+  function afterCall() {
+    return `<div class="call-ended"><small>${esc(t('cv.ended'))}</small>
+      <button type="button" class="link-btn" data-act="me-sub" data-sub="support">${esc(t('cv.support'))} ›</button></div>`;
+  }
+
+  function callOverlay() {
+    const c = view.call;
+    const o = c && store.getOrder(c.orderId);
+    if (!o || !store.canCall(o)) { view.call = null; return ''; }
+    const who = c.side === 'client' ? (o.driver.me ? t('o.you') : o.driver.name) : (o.owner === 'me' ? t('role.client') : o.client || t('role.client'));
+    return `<div class="call-sheet" role="dialog" aria-modal="true" aria-label="${esc(t('cv.call'))}">
+      <div class="call-card">
+        <span class="avatar avatar-lg call-avatar" aria-hidden="true">${initials(who)}</span>
+        <b>${esc(who)}</b>
+        <p class="pulse">${esc(t('cv.calling', { n: who }))}</p>
+        <p class="call-relay"><small>${esc(t('cv.relay'))}</small><span class="mono">+225 ${esc(o.relay)}</span></p>
+        <p class="hint">${esc(t('cv.masked'))}</p>
+        <button type="button" class="btn btn-danger btn-block" data-act="hangup">${esc(t('cv.hangup'))}</button>
+        <p class="hint">${esc(t('cv.demo'))}</p>
+      </div></div>`;
+  }
+
   // ---------- rendu ----------
   function currentRole() { return ROUTES[location.hash.slice(1)] || null; }
 
@@ -1472,7 +1537,8 @@
 
     const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
     const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
-    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}`;
+    const call = view.call && role !== 'admin' ? callOverlay() : '';
+    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
 
     Object.entries(keep).forEach(([id, v]) => {
       const el = document.getElementById(id);
@@ -1515,6 +1581,8 @@
     switch (b.dataset.act) {
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
+      case 'call': view.call = { orderId: id, side: b.dataset.side }; render(); break;
+      case 'hangup': view.call = null; render(); break;
       case 'dtab': view.dtab = b.dataset.tab; view.dmeSub = ''; view.confirmLogout = false; view.supportSent = false; dgo(); break;
       case 'dme-sub': view.dmeSub = b.dataset.sub; view.confirmLogout = false; view.supportSent = false; dgo(); break;
       case 'd-online': store.setDriver({ online: !store.driver().online }); break;

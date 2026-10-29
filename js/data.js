@@ -12,8 +12,8 @@
 
   // Options déclarées par le client (montants indicatifs, à tester pendant le pilote).
   const OPTIONS = {
-    helper: 2000,      // par manutentionnaire
-    floor: 1000,       // par étage sans ascenseur (départ + arrivée)
+    helper: 1000,      // par manutentionnaire
+    floor: 200,        // par étage sans ascenseur (départ + arrivée)
     packing: 3000,     // emballage
     dismantle: 2500    // démontage / remontage
   };
