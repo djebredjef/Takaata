@@ -3633,13 +3633,11 @@
       const minNet = netOf(o, o.minimum);
       if (!wanted || wanted < minNet) { view.offerMsg[id] = t('d.belowMinNet', { min: fcfa(minNet) }); render(); return; }
       const price = priceForNet(o, wanted);
-      faceGate('accept', id).then(ok => {
-        if (!ok) return;
-        const res = store.driverOffer(id, price);
-        view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
-        if (res.ok) { view.counterFor = null; view.reqFull = null; ui.toast(t('nt.sent')); }
-        render();
-      });
+      // Contre-offre : pas de scan du visage (réservé à l'acceptation de la course).
+      const res = store.driverOffer(id, price);
+      view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
+      if (res.ok) { view.counterFor = null; view.reqFull = null; ui.toast(t('nt.sent')); }
+      render();
     } else if (f.id === 'codeForm') {
       const id = f.dataset.id, val = (document.getElementById('dc-in').value || '').replace(/\D/g, '');
       if (val.length !== 4) { view.codeErr = t('dc.four'); render(); return; }
