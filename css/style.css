@@ -1344,3 +1344,5 @@ body.media-open { overflow: hidden; }
 .zone-chip { flex: none; position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 22px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 600; }
 .zone-chip .zone-heat { left: 8px; width: 8px; height: 8px; margin-top: -4px; }
 .zone-chip b { color: var(--signal); }
+.earn-row > .earn-only { grid-column: 1 / -1; }
+.counter-form .label { flex-basis: 100%; font-size: 13px; font-weight: 600; color: var(--muted); }

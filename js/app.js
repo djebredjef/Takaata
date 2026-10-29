@@ -1060,6 +1060,9 @@
   const SIGNUP_STEPS = ['id', 'license', 'vehicle', 'payout', 'review'];
   const PLATE_RE = /^\d{1,4}\s?[A-Z]{2}\s?\d{2}$/i;
   const net = o => o.price - commission(o.price, o.optionsPrice);
+  // Le chauffeur raisonne en gain net : conversion net ↔ prix client (commission sur le transport seulement).
+  const netOf = (o, price) => price - commission(price, o.optionsPrice);
+  const priceForNet = (o, n) => { let p = TK.roundUp100((n - TK.COMMISSION_RATE * (o.optionsPrice || 0)) / (1 - TK.COMMISSION_RATE)); while (netOf(o, p) < n) p += 100; return p; };
   const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const ageOf = iso => { if (!iso) return null; const b = new Date(iso), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
   const future = iso => iso && new Date(iso).getTime() > Date.now();
@@ -1402,7 +1405,7 @@
         <b>${esc(t('dh.done'))}</b><span class="mono">+ ${fcfa(view.celebrate.net)}</span><small>${esc(view.celebrate.msg)}</small></div>` : ''}
       ${pending.length ? `<section class="app-sec"><div class="stack">${pending.map(o => {
         const mine = o.offers.find(of => of.me && !of.declined);
-        return `<div class="notice">${route(o)} · ${esc(t('d.offerSent', { p: fcfa(mine.price) }))}</div>`;
+        return `<div class="notice">${route(o)} · ${esc(t('d.offerSentNet', { p: fcfa(netOf(o, mine.price)) }))}</div>`;
       }).join('')}</div></section>` : ''}
       ${d.online ? `<section class="app-sec">
         <h2 class="app-h">${esc(t('d.requests'))}</h2>
@@ -1427,7 +1430,7 @@
       <section class="app-sec">
         <h2 class="app-h">${esc(t('dg.history'))}</h2>
         ${e.length ? `<ol class="ledger-list">${e.map(x => `<li><span><b>${esc(commune(x.route[0]).name)} → ${esc(commune(x.route[1]).name)}</b>
-          <small>${date(x.at)} ${time(x.at)} · ${esc(t('pay.' + x.channel))} · ${esc(t('dg.line', { p: fmt(x.price), n: fmt(x.net) }))}</small></span><span class="mono pos">+ ${fmt(x.net)}</span></li>`).join('')}</ol>`
+          <small>${date(x.at)} ${time(x.at)} · ${esc(t('pay.' + x.channel))} · ${esc(t('dg.lineNet'))}</small></span><span class="mono pos">+ ${fmt(x.net)}</span></li>`).join('')}</ol>`
           : `<p class="empty">${esc(t('dg.noHistory'))}</p>`}
       </section>
       <section class="app-sec">
@@ -1543,8 +1546,7 @@
           <span class="rq-go" aria-hidden="true">›</span>
         </div>
         <div class="earn-row">
-          <div><small>${esc(t('dj.price'))}</small><b class="mono">${fcfa(o.price)}</b></div>
-          <div class="earn-net"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o))}</b></div>
+          <div class="earn-net earn-only"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o))}</b></div>
         </div>
         <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}${(o.itemPhotos || []).length ? ` · 📷 ${o.itemPhotos.length}` : ''}${o.voice ? ' · 🎤' : ''}</p>
       </button>`;
@@ -1565,7 +1567,7 @@
       <button type="button" class="ov-x full-x" data-act="rf-close" aria-label="${esc(t('md.close'))}">✕</button>
       <div class="full-sheet">
         <div class="rf-head">
-          <div class="rf-price"><small>${esc(t('dj.price'))}</small><b class="mono">${fcfa(o.price)}</b><span>${esc(t('dj.net'))} <b class="mono">${fcfa(net(o))}</b></span></div>
+          <div class="rf-price"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o))}</b></div>
           <div class="rf-timer" style="--p:${(left / REQ_SECONDS).toFixed(3)}" role="timer" aria-label="${left} s"><b class="mono">${left}</b></div>
         </div>
         <ol class="rf-route">
@@ -1577,7 +1579,7 @@
         ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
         ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
         ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
-        <button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(o.price) }))}</button>
+        <button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(net(o)) }))}</button>
         <p class="hint rf-face">◉ ${esc(t('fs.acceptNote'))}</p>
         <div class="rf-more">
           <button class="link-btn" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
@@ -1585,8 +1587,9 @@
         </div>
         ${view.declineFor === o.id ? `<div class="decline-box"><small>${esc(t('dd.why'))}</small><div class="tag-row">
           ${['far', 'low', 'vehicle', 'heavy', 'other'].map(r => `<button type="button" class="tag" data-act="d-decline" data-id="${o.id}" data-r="${r}">${esc(t('dd.' + r))}</button>`).join('')}</div></div>` : ''}
-        ${view.counterFor === o.id ? `<form class="counter-form" data-id="${o.id}">
-          <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${o.minimum}" value="${TK.roundUp100(o.price * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
+        ${view.counterFor === o.id ? `<form class="counter-form" data-id="${o.id}" novalidate>
+          <span class="label">${esc(t('d.counterNet'))}</span>
+          <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${netOf(o, o.minimum)}" value="${TK.roundUp100(net(o) * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
           <button class="btn btn-signal btn-sm" type="submit">${esc(t('d.send'))}</button>
         </form>` : ''}`}
       </div></div>`;
@@ -1632,7 +1635,7 @@
       </div>
       <div class="nav-map">${ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
       <div class="nav-sheet">
-        <div class="request-top"><div><b>${route(o)}</b><small>${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')} · <span class="mono">${fcfa(o.price)}</span></small></div>${pill(o.status)}</div>
+        <div class="request-top"><div><b>${route(o)}</b><small>${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')} · ${esc(t('dj.net'))} <span class="mono">${fcfa(net(o))}</span></small></div>${pill(o.status)}</div>
         ${callBlock(o, 'driver')}
         ${o.status === 'pickup' ? `<div class="code-box code-box-driver">
           <span>${esc(t('cv.verifyT'))}</span><b class="mono">${esc((o.clientPhone || '').slice(-4))}</b>
@@ -2729,7 +2732,7 @@
                 <button class="btn btn-ghost btn-sm" type="button" data-act="vv-prop-open" data-id="${tr.id}">${esc(t('vv.propose'))}</button>
                 <button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${tr.id}">${esc(t('vv.reserve', { p: fcfa(q.deposit) }))}</button>
               </div></div>
-            ${v.propFor === tr.id ? `<form class="prop-form" data-id="${tr.id}">
+            ${v.propFor === tr.id ? `<form class="prop-form" data-id="${tr.id}" novalidate>
               <label class="price-input"><span class="sr-only">${esc(t('vv.yourPrice'))}</span><input type="number" id="vp-${tr.id}" step="50" min="100" value="${TK.roundUp100(tr.pricePerUnit * 0.9)}" inputmode="numeric"><span>FCFA</span></label>
               <button class="btn btn-signal btn-sm" type="submit">${esc(t('vv.sendProp'))}</button>
               <p class="hint">${esc(t('vv.yourPrice'))} · ${esc(t('vv.propNote'))}</p></form>` : ''}
@@ -3025,7 +3028,10 @@
       'nv.toPickup': 'Allez au chargement', 'nv.toDrop': 'Livrez à', 'nv.gmaps': 'Itinéraire ↗', 'nv.details': 'Détails de la course',
       'nv.startNote': 'Prenez des photos du chargement : elles sont obligatoires pour démarrer, avec un scan du visage.', 'nv.needPhotos': 'Prenez d’abord au moins une photo du chargement.',
       'd.proofHint2': 'Photos = preuve en cas de litige.', 'd.next.loading': 'Démarrer la course', 'd.next.transit': 'Je suis arrivé',
-      'vv.reprop': 'Proposer un autre prix', 'da.selfie': 'Scan du visage en direct'
+      'vv.reprop': 'Proposer un autre prix', 'da.selfie': 'Scan du visage en direct',
+      'd.accept': 'Accepter · gain {p}', 'd.counterNet': 'Votre gain net souhaité', 'd.belowMinNet': 'Gain net minimum pour cette course : {min}.',
+      'd.offerSentNet': 'Offre envoyée : gain net {p}. En attente du client.', 'dg.lineNet': 'Gain net',
+      'd.cashHint': 'Paiement en espèces : encaissez {p} auprès du client. Votre gain net : {n}.'
     },
     en: {
       'w.proposeT': 'Name your price · counter-offers possible',
@@ -3053,7 +3059,10 @@
       'nv.toPickup': 'Go to pickup', 'nv.toDrop': 'Deliver to', 'nv.gmaps': 'Directions ↗', 'nv.details': 'Trip details',
       'nv.startNote': 'Take photos of the load: they are required to start, with a face scan.', 'nv.needPhotos': 'First take at least one photo of the load.',
       'd.proofHint2': 'Photos = proof in case of dispute.', 'd.next.loading': 'Start the trip', 'd.next.transit': 'I have arrived',
-      'vv.reprop': 'Offer another price', 'da.selfie': 'Live face scan'
+      'vv.reprop': 'Offer another price', 'da.selfie': 'Live face scan',
+      'd.accept': 'Accept · earn {p}', 'd.counterNet': 'Net earnings you want', 'd.belowMinNet': 'Minimum net earnings for this trip: {min}.',
+      'd.offerSentNet': 'Offer sent: net {p}. Waiting for the customer.', 'dg.lineNet': 'Net earnings',
+      'd.cashHint': 'Cash payment: collect {p} from the customer. Your net earnings: {n}.'
     }
   });
 
@@ -3619,8 +3628,11 @@
       const id = f.dataset.id;
       const input = document.getElementById('ctr-' + id);
       const o = store.getOrder(id);
-      const price = Number(input.value);
-      if (!price || price < o.minimum) { view.offerMsg[id] = t('w.belowMin', { min: fcfa(o.minimum) }); render(); return; }
+      // Le chauffeur saisit le gain net qu'il veut ; le client voit le prix correspondant.
+      const wanted = Number(input.value);
+      const minNet = netOf(o, o.minimum);
+      if (!wanted || wanted < minNet) { view.offerMsg[id] = t('d.belowMinNet', { min: fcfa(minNet) }); render(); return; }
+      const price = priceForNet(o, wanted);
       faceGate('accept', id).then(ok => {
         if (!ok) return;
         const res = store.driverOffer(id, price);
@@ -3718,8 +3730,12 @@
     if (role === 'client' && !store.user() && view.auth.step === 'otp') render();
     else if (role === 'driver' && !store.driver() && view.dauth.step === 'otp') render();
     else if (role === 'driver' && view.reqFull) {
-      if (Date.now() >= view.reqFullUntil) view.reqFull = null;
-      render();
+      // Le compte à rebours se met à jour sur place : redessiner l'écran chaque seconde ferait perdre des appuis.
+      if (Date.now() >= view.reqFullUntil) { view.reqFull = null; render(); }
+      else {
+        const el = root.querySelector('.rf-timer'), left = Math.max(0, Math.ceil((view.reqFullUntil - Date.now()) / 1000));
+        if (el) { el.style.setProperty('--p', (left / REQ_SECONDS).toFixed(3)); el.querySelector('b').textContent = left; el.setAttribute('aria-label', left + ' s'); }
+      }
     }
   }, 1000);
 
