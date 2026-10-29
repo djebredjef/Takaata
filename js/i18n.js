@@ -9,9 +9,9 @@
     'hero.lead': "Déménagement, meubles, vivriers, colis volumineux : publiez votre demande, recevez les offres de chauffeurs vérifiés et choisissez celle qui vous convient.",
     'hero.ctaClient': 'Commander un transport', 'hero.ctaDriver': 'Devenir chauffeur partenaire',
 
-    'need.moving': 'Déménagement', 'need.furniture': 'Meubles', 'need.food': 'Vivriers',
+    'need.moving': 'Déménagement', 'need.goods': 'Marchandises', 'need.furniture': 'Meubles', 'need.food': 'Vivriers',
     'need.shop': 'Approvisionnement de commerce', 'need.parcel': 'Colis volumineux',
-    'needd.moving': 'Studio, appartement, partiel ou complet', 'needd.furniture': 'Achat en magasin, menuisier, livraison',
+    'needd.moving': 'Maison, bureau, meubles, électroménager', 'needd.goods': 'Vivriers, stock de commerce, grossistes', 'needd.furniture': 'Achat en magasin, menuisier, livraison',
     'needd.food': 'Marché, grossiste, sacs et cageots', 'needd.shop': 'Stock, boissons, marchandises',
     'needd.parcel': 'Électroménager, cartons, matériel',
 
@@ -179,9 +179,9 @@
     'hero.lead': 'Moving house, furniture, food produce, bulky parcels: post your request, get offers from verified drivers and pick the one that suits you.',
     'hero.ctaClient': 'Book a transport', 'hero.ctaDriver': 'Become a partner driver',
 
-    'need.moving': 'Moving', 'need.furniture': 'Furniture', 'need.food': 'Food produce',
+    'need.moving': 'Moving', 'need.goods': 'Goods', 'need.furniture': 'Furniture', 'need.food': 'Food produce',
     'need.shop': 'Shop restocking', 'need.parcel': 'Bulky parcels',
-    'needd.moving': 'Studio, flat, partial or full move', 'needd.furniture': 'Store purchase, carpenter, delivery',
+    'needd.moving': 'Home, office, furniture, appliances', 'needd.goods': 'Food produce, shop stock, wholesalers', 'needd.furniture': 'Store purchase, carpenter, delivery',
     'needd.food': 'Market, wholesaler, sacks and crates', 'needd.shop': 'Stock, drinks, goods',
     'needd.parcel': 'Appliances, boxes, equipment',
 

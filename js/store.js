@@ -52,7 +52,8 @@
       driverSession: null,
       reports: [],
       leads: [],
-      pricing: null,    // grille modifiée depuis l'Admin (null = grille du business plan)
+      pricing: null,
+      events: [],       // journal d'usage pour les analyses (publication, offres, refus, annulations…)    // grille modifiée depuis l'Admin (null = grille du business plan)
       accounts: {},     // comptes clients par numéro (prototype local ; Firebase Auth au lancement)
       session: null,    // numéro du client connecté
       seeded: false
@@ -102,6 +103,15 @@
   const CALLABLE = ['assigned', 'pickup', 'loading', 'transit', 'arrived'];
   function canCall(o) { return !!(o && o.driver && CALLABLE.includes(o.status)); }
 
+  // --- journal d'usage (analyses) ---
+  const MAX_EVENTS = 5000;
+  function track(type, o, extra) {
+    const e = Object.assign({ at: Date.now(), type }, o ? { orderId: o.id, from: o.from, to: o.to, vehicle: o.vehicle, need: o.need, km: o.km } : {}, extra);
+    state.events.unshift(e);
+    if (state.events.length > MAX_EVENTS) state.events.length = MAX_EVENTS;
+  }
+  const who = of => of.me && drv() ? drv().phone : of.name;
+
   // --- commandes ---
   function buildOrder(draft, owner) {
     const km = distanceKm(draft.from, draft.to);
@@ -136,6 +146,7 @@
   function createOrder(draft) {
     const o = buildOrder(draft, 'me');
     state.orders.unshift(o);
+    track('created', o, { price: o.price, reference: o.reference, service: o.service, passengers: +o.passengers || 0 });
     emit();
     return o;
   }
@@ -182,6 +193,7 @@
     const c = commission(price, o.optionsPrice);
     if (available() < c) return { ok: false, missing: c - available() };
     hold(o.id, c);
+    track('offer', o, { driver: dd.phone, kind: price === o.price ? 'accept' : 'counter', price, asked: o.price, reference: o.reference, delayMs: Date.now() - o.createdAt });
     const d = drv();
     o.offers.push({
       id: `${o.id}-me`, me: true, at: Date.now(), name: `${d.firstName} ${d.lastName}`, rating: driverRating(d), trips: d.trips,
@@ -211,6 +223,7 @@
     o.price = offer.price;
     o.commission = commission(offer.price, o.optionsPrice);
     o.status = 'assigned';
+    track('assigned', o, { driver: who(offer), kind: offer.kind, price: offer.price, asked: o.price, reference: o.reference, delayMs: Date.now() - o.createdAt });
     o.timeline.assigned = Date.now();
     o.sim = !offer.me;
     if (o.sim) {
@@ -242,6 +255,7 @@
     if (!o || o.status !== 'arrived') return;
     o.status = 'delivered';
     o.closedBy = by;
+    track('delivered', o, { driver: o.driver && who(o.driver), price: o.price, by, durationMs: Date.now() - (o.timeline.assigned || o.createdAt) });
     delete o.autoConfirmAt;
     o.timeline.delivered = Date.now();
     // Le chauffeur note aussi le client (simulé : 5 étoiles).
@@ -278,6 +292,7 @@
     const o = getOrder(orderId);
     if (!o || ['delivered', 'cancelled', 'arrived'].includes(o.status)) return;
     o.cancelFree = cancelInfo(o).free;
+    track('cancelled', o, { stage: o.status, by: o.cancelledBy || (o.owner === 'me' ? 'client' : 'other'), free: o.cancelFree, driver: o.driver && who(o.driver) });
     o.status = 'cancelled';
     o.timeline.cancelled = Date.now();
     if (drv() && drv().holds[o.id] != null) release(o.id);
@@ -288,6 +303,7 @@
     const o = getOrder(orderId);
     if (!o || o.rating != null) return;
     o.rating = stars;
+    track('rated', o, { driver: o.driver && who(o.driver), stars, tags: tags || [] });
     o.ratingTags = tags || [];
     o.ratingComment = comment || '';
     if (o.driver && o.driver.me && drv()) {
@@ -341,6 +357,7 @@
         const seen = o.seenOffers || 0;
         const count = o.plannedOffers.filter(p => p.at <= now).length;
         if (count > seen) {
+          o.plannedOffers.filter(p => p.at <= now).slice(seen).forEach(p => track('offer', o, { driver: p.name, kind: p.kind, price: p.price, asked: o.price, reference: o.reference, delayMs: p.at - o.createdAt }));
           o.seenOffers = count;
           changed = true;
           events.push({ type: 'offer', order: o });
@@ -356,6 +373,7 @@
           } else {
             mine.declined = true;
             if (drv()) release(o.id);
+            track('offer_rejected', o, { driver: drv() && drv().phone, price: mine.price, asked: o.price });
             events.push({ type: 'declined', order: o });
           }
         }
@@ -425,6 +443,67 @@
     cancelOrder(orderId);
   }
 
+  // Refus d'une demande par le chauffeur, avec son motif (données pour les analyses).
+  function driverDecline(orderId, reason) {
+    const o = getOrder(orderId), d = drv();
+    if (!o || !d) return;
+    d.declined = Object.assign({}, d.declined, { [orderId]: Date.now() });
+    track('declined', o, { driver: d.phone, reason, price: o.price });
+    emit();
+  }
+
+  // En ligne / hors ligne : on garde les sessions pour le temps en ligne.
+  function setOnline(on) {
+    const d = drv();
+    if (!d || !!d.online === on) return;
+    d.online = on;
+    d.sessions = d.sessions || [];
+    if (on) d.sessions.push({ from: Date.now() });
+    else if (d.sessions.length && !d.sessions[d.sessions.length - 1].to) d.sessions[d.sessions.length - 1].to = Date.now();
+    track(on ? 'online' : 'offline', null, { driver: d.phone });
+    emit();
+  }
+  function onlineMsSince(d, since) {
+    return (d.sessions || []).reduce((a, x) => a + Math.max(0, (x.to || Date.now()) - Math.max(x.from, since)), 0);
+  }
+
+  // Données de démonstration pour l'onglet Analyses (30 jours simulés, marqués demo).
+  function seedAnalytics() {
+    const r = rng('analytics' + Date.now());
+    const pick = arr => arr[Math.floor(r() * arr.length)];
+    const weights = { yopougon: 9, abobo: 7, cocody: 8, adjame: 8, marcory: 5, koumassi: 5, plateau: 6, treichville: 4, portbouet: 3, attecoube: 2, bingerville: 2, anyama: 1, songon: 1 };
+    const pool = Object.entries(weights).flatMap(([c, w]) => Array(w).fill(c));
+    const hourW = [0, 0, 0, 0, 0, 1, 3, 6, 9, 8, 7, 6, 5, 5, 6, 7, 8, 9, 7, 4, 2, 1, 0, 0];
+    const hours = hourW.flatMap((w, h) => Array(w).fill(h));
+    const vehicles = ['tricycle', 'tricycle', 'van1t', 'van1t', 'van1t', 'van1t', 'truck3t', 'truck3t', 'truck10t'];
+    const reasons = ['far', 'far', 'far', 'low', 'low', 'low', 'low', 'vehicle', 'heavy', 'other'];
+    const drivers = DRIVER_POOL.map(d => d.name);
+    const out = [];
+    for (let i = 0; i < 420; i++) {
+      const day = Math.floor(r() * 30), h = pick(hours);
+      const at = Date.now() - day * 864e5 - (new Date().getHours() - h) * 36e5 - Math.floor(r() * 36e5);
+      const from = pick(pool); let to = pick(pool); if (to === from && r() < .6) to = pick(pool);
+      const vehicle = pick(vehicles), km = distanceKm(from, to);
+      const ref = quote(vehicle, km, null).reference;
+      const asked = TK.roundUp100(ref * (0.9 + r() * 0.2));
+      const base = { orderId: 'DEMO-' + i, from, to, vehicle, need: pick(['moving', 'goods', 'goods', 'parcel']), km, demo: true };
+      out.push(Object.assign({ at, type: 'created', price: asked, reference: ref, service: r() < .4 ? 'handling' : 'transport', passengers: Math.floor(r() * 3) }, base));
+      const nDecl = Math.floor(r() * 3);
+      for (let k = 0; k < nDecl; k++) out.push(Object.assign({ at: at + 30000 * (k + 1), type: 'declined', driver: pick(drivers), reason: pick(reasons), price: asked }, base));
+      if (r() < .12) { out.push(Object.assign({ at: at + 120000, type: 'cancelled', stage: 'open', by: 'client', free: true }, base)); continue; }
+      const dName = pick(drivers), counter = r() < .55, price = counter ? TK.roundUp100(asked * (1.05 + r() * .15)) : asked;
+      const delay = 20000 + Math.floor(r() * 240000);
+      out.push(Object.assign({ at: at + delay - 5000, type: 'offer', driver: dName, kind: counter ? 'counter' : 'accept', price, asked, reference: ref, delayMs: delay - 5000 }, base));
+      out.push(Object.assign({ at: at + delay, type: 'assigned', driver: dName, kind: counter ? 'counter' : 'accept', price, asked, reference: ref, delayMs: delay }, base));
+      if (r() < .06) { out.push(Object.assign({ at: at + delay + 300000, type: 'cancelled', stage: 'assigned', by: r() < .5 ? 'client' : 'driver', driver: dName }, base)); continue; }
+      out.push(Object.assign({ at: at + delay + 2700000, type: 'delivered', driver: dName, price, by: r() < .7 ? 'client' : 'auto', durationMs: 2400000 + Math.floor(r() * 3e6) }, base));
+      if (r() < .7) out.push(Object.assign({ at: at + delay + 2800000, type: 'rated', driver: dName, stars: r() < .8 ? 5 : r() < .6 ? 4 : 3, tags: [] }, base));
+    }
+    state.events = state.events.filter(e => !e.demo).concat(out).sort((a, b) => b.at - a.at).slice(0, MAX_EVENTS);
+    emit();
+  }
+  function clearDemoAnalytics() { state.events = state.events.filter(e => !e.demo); emit(); }
+
   function setDriver(patch) { if (drv()) { Object.assign(drv(), patch); emit(); } }
 
   // --- comptes chauffeurs ---
@@ -440,7 +519,7 @@
     emit();
   }
   function driverLogin(phone) { if (state.driverAccounts[phone]) { state.driverSession = phone; emit(); } }
-  function driverLogout() { if (drv()) drv().online = false; state.driverSession = null; emit(); }
+  function driverLogout() { if (drv() && drv().online) setOnline(false); state.driverSession = null; emit(); }
   function reviewDriver(phone, ok, reason) {
     const d = state.driverAccounts[phone];
     if (!d) return;
@@ -461,6 +540,7 @@
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
       advance, confirmDelivery, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
+      driverDecline, setOnline, onlineMsSince, seedAnalytics, clearDemoAnalytics,
       setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
       held, available, NEXT, AUTO_CLOSE_MS, canCall

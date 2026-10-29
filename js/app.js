@@ -4,7 +4,7 @@
   const { fcfa, esc, fmt } = ui;
 
   const ROUTES = { app: 'client', chauffeur: 'driver', admin: 'admin' };
-  const NEED_VEHICLE = { moving: 'truck3t', furniture: 'van1t', food: 'truck3t', shop: 'van1t', parcel: 'tricycle' };
+  const NEED_VEHICLE = { moving: 'truck3t', goods: 'van1t', parcel: 'tricycle', furniture: 'van1t', food: 'truck3t', shop: 'van1t' };
   const PROGRESS = { open: null, assigned: 0, pickup: 0, loading: 0.04, transit: 0.55, arrived: 1, delivered: 1, cancelled: null };
   const ACTIVE = ['open', 'assigned', 'pickup', 'loading', 'transit', 'arrived'];
 
@@ -1208,6 +1208,89 @@
       </div>`;
   }
 
+  TK.addStrings({
+    fr: {
+      'dh.morning': 'Bonjour', 'dh.afternoon': 'Bon après-midi', 'dh.evening': 'Bonsoir', 'dh.today': 'Gagné aujourd’hui', 'dh.of': 'sur {g} FCFA',
+      'dh.start': 'Prêt pour votre première course de la journée ?', 'dh.left': 'Plus que {n} pour atteindre votre objectif.',
+      'dh.goalDone': 'Objectif du jour atteint. Bravo !', 'dh.onlineTime': 'En ligne', 'dh.goal': 'Objectif',
+      'dh.go': 'Passer en ligne', 'dh.goS': 'Recevez les demandes près de vous', 'dh.searching': 'Recherche de courses pour votre {v}…',
+      'dh.zones': 'Zones demandées en ce moment', 'dh.req1': '1 demande', 'dh.reqN': '{n} demandes', 'dh.badges': 'Mes réussites',
+      'dh.done': 'Course terminée !',
+      'bd.first': '1re course', 'bd.firstD': 'Terminer une première course', 'bd.ten': '10 courses', 'bd.tenD': 'Terminer 10 courses',
+      'bd.fifty': '50 courses', 'bd.fiftyD': 'Terminer 50 courses', 'bd.star': 'Étoile', 'bd.starD': 'Note de 4,8 ou plus sur 5 notes',
+      'bd.early': 'Lève-tôt', 'bd.earlyD': 'Une course terminée avant 8 h',
+      'dd.decline': 'Refuser', 'dd.why': 'Pourquoi refusez-vous ? (aide à améliorer les demandes)', 'dd.far': 'Trop loin', 'dd.low': 'Prix trop bas',
+      'dd.vehicle': 'Véhicule inadapté', 'dd.heavy': 'Chargement trop lourd', 'dd.other': 'Autre'
+    },
+    en: {
+      'dh.morning': 'Good morning', 'dh.afternoon': 'Good afternoon', 'dh.evening': 'Good evening', 'dh.today': 'Earned today', 'dh.of': 'of {g} FCFA',
+      'dh.start': 'Ready for your first trip of the day?', 'dh.left': 'Only {n} left to reach your goal.',
+      'dh.goalDone': 'Daily goal reached. Well done!', 'dh.onlineTime': 'Online', 'dh.goal': 'Goal',
+      'dh.go': 'Go online', 'dh.goS': 'Receive requests near you', 'dh.searching': 'Looking for trips for your {v}…',
+      'dh.zones': 'Busy areas right now', 'dh.req1': '1 request', 'dh.reqN': '{n} requests', 'dh.badges': 'My achievements',
+      'dh.done': 'Trip completed!',
+      'bd.first': '1st trip', 'bd.firstD': 'Complete a first trip', 'bd.ten': '10 trips', 'bd.tenD': 'Complete 10 trips',
+      'bd.fifty': '50 trips', 'bd.fiftyD': 'Complete 50 trips', 'bd.star': 'Star', 'bd.starD': 'Rating of 4.8 or more over 5 ratings',
+      'bd.early': 'Early bird', 'bd.earlyD': 'A trip completed before 8 am',
+      'dd.decline': 'Decline', 'dd.why': 'Why are you declining? (helps improve requests)', 'dd.far': 'Too far', 'dd.low': 'Price too low',
+      'dd.vehicle': 'Wrong vehicle', 'dd.heavy': 'Load too heavy', 'dd.other': 'Other'
+    }
+  });
+  // Accueil chauffeur : salutation, objectif du jour, mise en ligne, zones demandées, badges.
+  const GOALS = [10000, 15000, 20000, 30000];
+  const BADGES = [
+    ['first', d => d.trips >= 1], ['ten', d => d.trips >= 10], ['fifty', d => d.trips >= 50],
+    ['star', d => d.ratingCount >= 5 && store.driverRating(d) >= 4.8], ['early', d => (d.earnings || []).some(x => new Date(x.at).getHours() < 8)]
+  ];
+  function driverHero(d, open) {
+    const e = d.earnings || [];
+    const todays = e.filter(x => x.at >= today0());
+    const todayNet = todays.reduce((a, x) => a + x.net, 0);
+    const goal = d.goal || 15000;
+    const pct = Math.min(1, todayNet / goal);
+    const mins = Math.round(store.onlineMsSince(d, today0()) / 60000);
+    const h = new Date().getHours();
+    const R = 54, C = 2 * Math.PI * R;
+    const zones = Object.entries(open.reduce((m, o) => (m[o.from] = (m[o.from] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const rating = store.driverRating(d);
+    const left = Math.max(0, goal - todayNet);
+    return `
+      <section class="dhero${d.online ? ' is-on' : ''}">
+        <div class="dhero-top">
+          <div><small>${esc(t(h < 12 ? 'dh.morning' : h < 18 ? 'dh.afternoon' : 'dh.evening'))}</small><b>${esc(d.firstName)}</b></div>
+          <span class="dhero-rating"><span aria-hidden="true">★</span> ${rating.toLocaleString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+        </div>
+        <div class="dhero-ring">
+          <svg viewBox="0 0 128 128" aria-hidden="true">
+            <circle class="ring-bg" cx="64" cy="64" r="${R}"/>
+            <circle class="ring-fg" cx="64" cy="64" r="${R}" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 64 64)"/>
+          </svg>
+          <div class="ring-txt"><small>${esc(t('dh.today'))}</small><b class="mono">${fmt(todayNet)}</b><span>${esc(t('dh.of', { g: fmt(goal) }))}</span></div>
+        </div>
+        <p class="dhero-msg">${esc(pct >= 1 ? t('dh.goalDone') : todayNet ? t('dh.left', { n: fcfa(left) }) : t('dh.start'))}</p>
+        <div class="dhero-stats">
+          <div><b class="mono">${todays.length}</b><small>${esc(t('dg.trips'))}</small></div>
+          <div><b class="mono">${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')}</b><small>${esc(t('dh.onlineTime'))}</small></div>
+          <button type="button" data-act="d-goal-edit"><b class="mono">${fmt(goal)}</b><small>${esc(t('dh.goal'))} ✎</small></button>
+        </div>
+        ${view.goalEdit ? `<div class="tag-row dhero-goals">${GOALS.map(g => `<button type="button" class="tag${g === goal ? ' is-on' : ''}" data-act="d-goal" data-n="${g}">${fmt(g)}</button>`).join('')}</div>` : ''}
+        <button type="button" class="go-btn" data-act="d-online" aria-pressed="${!!d.online}">
+          ${d.online ? `<span class="radar" aria-hidden="true"><i></i><i></i><i></i></span>` : ''}
+          <b>${esc(t(d.online ? 'dj.online' : 'dh.go'))}</b>
+          <small>${esc(d.online ? t('dh.searching', { v: t('veh.' + d.vehicle) }) : t('dh.goS'))}</small>
+        </button>
+        ${d.online ? `<button type="button" class="link-btn dhero-off" data-act="d-online">${esc(t('dj.goOffline'))}</button>` : ''}
+      </section>
+      ${zones.length ? `<section class="app-sec">
+        <h2 class="app-h">${esc(t('dh.zones'))}</h2>
+        <div class="zone-row">${zones.map(([c, n]) => `<span class="zone"><span class="zone-heat" style="--h:${Math.min(1, n / zones[0][1])}" aria-hidden="true"></span><b>${esc(commune(c).name)}</b><small>${esc(t(n > 1 ? 'dh.reqN' : 'dh.req1', { n }))}</small></span>`).join('')}</div>
+      </section>` : ''}
+      <section class="app-sec">
+        <h2 class="app-h">${esc(t('dh.badges'))}</h2>
+        <div class="badge-row">${BADGES.map(([k, ok]) => `<span class="badge${ok(d) ? ' is-on' : ''}" title="${esc(t('bd.' + k + 'D'))}"><i aria-hidden="true">${ok(d) ? '★' : '☆'}</i><b>${esc(t('bd.' + k))}</b><small>${esc(t('bd.' + k + 'D'))}</small></span>`).join('')}</div>
+      </section>`;
+  }
+
   function driverJobs(d) {
     if (d.status !== 'approved') {
       return `<section class="app-sec">
@@ -1221,17 +1304,14 @@
     const mineActive = store.state.orders.filter(o => o.driver && o.driver.me && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status));
     const open = store.state.orders.filter(o => o.status === 'open');
     const pending = open.filter(o => o.offers.some(of => of.me && !of.declined));
-    const requests = open.filter(o => !pending.includes(o));
+    // Seules les demandes pour le véhicule du chauffeur lui sont proposées.
+    const requests = open.filter(o => o.vehicle === d.vehicle && !pending.includes(o) && !(d.declined && d.declined[o.id]));
     const avail = store.available();
     return `
-      <section class="app-sec">
-        <button type="button" class="online-toggle${d.online ? ' is-on' : ''}" data-act="d-online" aria-pressed="${!!d.online}">
-          <span class="online-dot" aria-hidden="true"></span>
-          <span class="online-txt"><b>${esc(t(d.online ? 'dj.online' : 'dj.offline'))}</b><small>${esc(d.online ? t('dj.onlineS', { v: t('veh.' + d.vehicle) }) : t('dj.offlineS'))}</small></span>
-          <span class="online-cta">${esc(t(d.online ? 'dj.goOffline' : 'dj.goOnline'))}</span>
-        </button>
-        ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
-      </section>
+      ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
+      ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
+      ${view.celebrate ? `<div class="celebrate" role="status"><span class="celebrate-burst" aria-hidden="true"></span>
+        <b>${esc(t('dh.done'))}</b><span class="mono">+ ${fcfa(view.celebrate.net)}</span><small>${esc(view.celebrate.msg)}</small></div>` : ''}
       ${mineActive.length ? `<section class="app-sec"><h2 class="app-h">${esc(t('d.myCourse'))}</h2>${mineActive.map(driverCourse).join('')}</section>` : ''}
       ${pending.length ? `<section class="app-sec"><div class="stack">${pending.map(o => {
         const mine = o.offers.find(of => of.me && !of.declined);
@@ -1387,7 +1467,10 @@
           <div class="btn-row">
             <button class="btn btn-signal btn-sm" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(o.price) }))}</button>
             <button class="btn btn-ghost btn-sm" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
+            <button class="btn btn-ghost btn-sm btn-decline" type="button" data-act="d-decline-open" data-id="${o.id}">${esc(t('dd.decline'))}</button>
           </div>
+          ${view.declineFor === o.id ? `<div class="decline-box"><small>${esc(t('dd.why'))}</small><div class="tag-row">
+            ${['far', 'low', 'vehicle', 'heavy', 'other'].map(r => `<button type="button" class="tag" data-act="d-decline" data-id="${o.id}" data-r="${r}">${esc(t('dd.' + r))}</button>`).join('')}</div></div>` : ''}
           ${counterOpen ? `<form class="counter-form" data-id="${o.id}">
             <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${o.minimum}" value="${TK.roundUp100(o.price * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
             <button class="btn btn-signal btn-sm" type="submit">${esc(t('d.send'))}</button>
@@ -1462,6 +1545,7 @@
 
   const AD_MODULES = [
     ['dash', 'M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],
+    ['analytics', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
     ['orders', 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4'],
     ['drivers', 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
     ['clients', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-4-5.6'],
@@ -1469,7 +1553,7 @@
     ['support', 'M4 13a8 8 0 0 1 16 0v4h-4v-5h4M4 12h4v5H4z'],
     ['pricing', 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01']
   ];
-  if (!view.adm) view.adm = { mod: 'dash', filter: 'all', q: '', order: null, driver: null, client: null, dtab: 'pending', reason: 'ad.r1' };
+  if (!view.adm) view.adm = { period: 30, mod: 'dash', filter: 'all', q: '', order: null, driver: null, client: null, dtab: 'pending', reason: 'ad.r1' };
 
   const isDispute = o => o.disputed && o.status === 'arrived';
   const clientName = o => {
@@ -1489,7 +1573,7 @@
     const badge = { drivers: pendingDrivers, support: openDisputes };
     const nav = AD_MODULES.map(([m, icon]) => `<button type="button" class="adm-nav${a.mod === m ? ' is-on' : ''}" data-act="adm-mod" data-mod="${m}"${a.mod === m ? ' aria-current="page"' : ''}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}"/></svg><span>${esc(t('ad.' + m))}</span>${badge[m] ? `<b class="adm-badge">${badge[m]}</b>` : ''}</button>`).join('');
-    const body = { dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
+    const body = { analytics: admAnalytics, dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
     return `<div class="adm">
       <aside class="adm-side">
         <div class="adm-brand"><span class="brand-mark" aria-hidden="true"></span><div><b>takaata</b><small>${esc(t('ad.brand'))}</small></div></div>
@@ -1727,6 +1811,143 @@
       </aside>`;
   }
 
+
+  // ---------- ADMIN · Analyses : données collectées pour améliorer le service ----------
+  TK.addStrings({
+    fr: {
+      'ad.analytics': 'Analyses', 'an.period': 'Période', 'an.d7': '7 jours', 'an.d30': '30 jours', 'an.all': 'Tout',
+      'an.created': 'Demandes publiées', 'an.assignRate': 'Taux d’attribution', 'an.assignDelay': 'Délai moyen d’attribution',
+      'an.cancelRate': 'Taux d’annulation', 'an.counterRate': 'Contre-offres', 'an.priceGap': 'Prix accepté vs référence',
+      'an.declines': 'Refus des chauffeurs', 'an.avgRating': 'Note moyenne des chauffeurs',
+      'an.byHour': 'Demandes par heure de la journée', 'an.from': 'Communes de départ', 'an.to': 'Communes d’arrivée',
+      'an.routes': 'Trajets les plus demandés', 'an.vehicles': 'Véhicules demandés', 'an.reasons': 'Motifs de refus des chauffeurs',
+      'an.cancelStage': 'Annulations : à quel moment ?', 'an.drivers': 'Comportement des chauffeurs',
+      'an.c.offers': 'Offres', 'an.c.counter': 'Contre-offres', 'an.c.declines': 'Refus', 'an.c.declineRate': 'Taux de refus',
+      'an.c.response': 'Réponse moy.', 'an.c.done': 'Livrées', 'an.c.cancel': 'Annul.', 'an.c.rating': 'Note',
+      'an.empty': 'Pas encore assez de données. Les événements s’enregistrent à chaque demande, offre, refus et livraison.',
+      'an.seed': 'Générer des données de démonstration', 'an.clear': 'Effacer les données de démonstration', 'an.export': 'Exporter (CSV)',
+      'an.demoNote': 'Données de démonstration incluses (simulées sur 30 jours).', 'an.min': '{n} min', 'an.events': '{n} événements enregistrés',
+      'an.st.open': 'Avant attribution', 'an.st.assigned': 'Après attribution', 'an.st.pickup': 'Chauffeur en route', 'an.st.loading': 'Au chargement', 'an.st.transit': 'En livraison',
+      'an.what': 'Ce qui est collecté : demandes (trajet, véhicule, heure, prix), offres et contre-offres, refus avec motif, attributions et délais, annulations (par qui, à quel moment), livraisons, notes et temps en ligne des chauffeurs.'
+    },
+    en: {
+      'ad.analytics': 'Analytics', 'an.period': 'Period', 'an.d7': '7 days', 'an.d30': '30 days', 'an.all': 'All',
+      'an.created': 'Requests posted', 'an.assignRate': 'Assignment rate', 'an.assignDelay': 'Average time to assign',
+      'an.cancelRate': 'Cancellation rate', 'an.counterRate': 'Counter-offers', 'an.priceGap': 'Accepted price vs reference',
+      'an.declines': 'Driver declines', 'an.avgRating': 'Average driver rating',
+      'an.byHour': 'Requests by hour of day', 'an.from': 'Pickup districts', 'an.to': 'Drop-off districts',
+      'an.routes': 'Most requested routes', 'an.vehicles': 'Vehicles requested', 'an.reasons': 'Why drivers decline',
+      'an.cancelStage': 'Cancellations: at which stage?', 'an.drivers': 'Driver behaviour',
+      'an.c.offers': 'Offers', 'an.c.counter': 'Counters', 'an.c.declines': 'Declines', 'an.c.declineRate': 'Decline rate',
+      'an.c.response': 'Avg response', 'an.c.done': 'Delivered', 'an.c.cancel': 'Cancel.', 'an.c.rating': 'Rating',
+      'an.empty': 'Not enough data yet. Events are recorded at each request, offer, decline and delivery.',
+      'an.seed': 'Generate demo data', 'an.clear': 'Clear demo data', 'an.export': 'Export (CSV)',
+      'an.demoNote': 'Demo data included (simulated over 30 days).', 'an.min': '{n} min', 'an.events': '{n} events recorded',
+      'an.st.open': 'Before assignment', 'an.st.assigned': 'After assignment', 'an.st.pickup': 'Driver on the way', 'an.st.loading': 'At loading', 'an.st.transit': 'In delivery',
+      'an.what': 'What is collected: requests (route, vehicle, time, price), offers and counter-offers, declines with reason, assignments and delays, cancellations (by whom, at which stage), deliveries, ratings and drivers’ online time.'
+    }
+  });
+
+  const pctStr = x => `${Math.round(x * 100)} %`;
+  const countBy = (list, key) => Object.entries(list.reduce((m, e) => { const k = typeof key === 'function' ? key(e) : e[key]; if (k != null) m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);
+
+  // Barres horizontales, une seule série : valeur écrite à côté de chaque barre, info-bulle au survol.
+  function hbars(rows, max = 8) {
+    if (!rows.length) return `<p class="empty">—</p>`;
+    const top = rows.slice(0, max), m = top[0][1] || 1;
+    return `<ul class="hbars">${top.map(([label, n]) => `<li tabindex="0" data-tip="${esc(label)} : ${fmt(n)}">
+      <span class="hb-label">${esc(label)}</span><span class="hb-track"><i style="width:${Math.max(2, n / m * 100).toFixed(1)}%"></i></span><b class="mono">${fmt(n)}</b></li>`).join('')}</ul>`;
+  }
+  function vbars(counts) {
+    const m = Math.max(1, ...counts);
+    return `<div class="vbars" role="img" aria-label="${esc(t('an.byHour'))}">${counts.map((n, h) => `<div class="vb" tabindex="0" data-tip="${h} h – ${h + 1} h : ${fmt(n)}">
+      <i style="height:${(n / m * 100).toFixed(1)}%"></i>${h % 3 === 0 ? `<span>${h} h</span>` : ''}</div>`).join('')}</div>`;
+  }
+
+  function driverLabel(key) {
+    const d = store.driverAccount(key);
+    return d ? `${d.firstName} ${d.lastName}` : key;
+  }
+
+  function admAnalytics() {
+    const a = view.adm;
+    const since = a.period ? Date.now() - a.period * 864e5 : 0;
+    const ev = store.state.events.filter(e => e.at >= since);
+    const by = type => ev.filter(e => e.type === type);
+    const created = by('created'), assigned = by('assigned'), cancelled = by('cancelled'), delivered = by('delivered');
+    const offers = by('offer'), declined = by('declined'), rated = by('rated');
+    const hasDemo = store.state.events.some(e => e.demo);
+    const avg = (list, f) => list.length ? list.reduce((x, e) => x + f(e), 0) / list.length : 0;
+    const head = `<div class="adm-filters">
+        <div class="tag-row adm-chips" role="group" aria-label="${esc(t('an.period'))}">${[[7, 'an.d7'], [30, 'an.d30'], [0, 'an.all']].map(([n, k]) => `<button type="button" class="tag${a.period === n ? ' is-on' : ''}" data-act="an-period" data-n="${n}">${esc(t(k))}</button>`).join('')}</div>
+        <div class="btn-row">
+          <button class="btn btn-ghost btn-sm" type="button" data-act="${hasDemo ? 'an-clear' : 'an-seed'}">${esc(t(hasDemo ? 'an.clear' : 'an.seed'))}</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-act="an-export"${ev.length ? '' : ' disabled'}>${esc(t('an.export'))}</button>
+        </div>
+      </div>
+      <p class="hint">${esc(t('an.events', { n: fmt(ev.length) }))}${hasDemo ? ' · ' + esc(t('an.demoNote')) : ''}</p>`;
+    if (!created.length) return `${head}<p class="empty">${esc(t('an.empty'))}</p><p class="hint">${esc(t('an.what'))}</p>`;
+
+    const hours = Array(24).fill(0);
+    created.forEach(e => { hours[new Date(e.at).getHours()]++; });
+    const gap = avg(assigned.filter(e => e.reference), e => e.price / e.reference - 1);
+    const drivers = {};
+    const D = k => (drivers[k] = drivers[k] || { offers: 0, counter: 0, declines: 0, resp: [], done: 0, cancel: 0, stars: [] });
+    offers.forEach(e => { const x = D(e.driver); x.offers++; if (e.kind === 'counter') x.counter++; if (e.delayMs) x.resp.push(e.delayMs); });
+    declined.forEach(e => { D(e.driver).declines++; });
+    delivered.forEach(e => { if (e.driver) D(e.driver).done++; });
+    cancelled.filter(e => e.driver && e.by === 'driver').forEach(e => { D(e.driver).cancel++; });
+    rated.forEach(e => { if (e.driver) D(e.driver).stars.push(e.stars); });
+    const drows = Object.entries(drivers).map(([k, x]) => Object.assign({ k, rate: x.declines / Math.max(1, x.declines + x.offers) }, x)).sort((p, q) => q.rate - p.rate);
+    const mean = arr => arr.length ? arr.reduce((p, q) => p + q, 0) / arr.length : 0;
+
+    return `${head}
+      <div class="adm-tiles">
+        ${tile(t('an.created'), fmt(created.length))}
+        ${tile(t('an.assignRate'), pctStr(assigned.length / created.length), '', 'ok')}
+        ${tile(t('an.assignDelay'), esc(t('an.min', { n: (avg(assigned, e => e.delayMs) / 60000).toFixed(1).replace('.', TK.getLang() === 'fr' ? ',' : '.') })))}
+        ${tile(t('an.cancelRate'), pctStr(cancelled.length / created.length), '', 'ko')}
+        ${tile(t('an.counterRate'), pctStr(offers.filter(e => e.kind === 'counter').length / Math.max(1, offers.length)))}
+        ${tile(t('an.priceGap'), `${gap >= 0 ? '+' : ''}${Math.round(gap * 100)} %`, '', 'accent')}
+        ${tile(t('an.declines'), fmt(declined.length))}
+        ${tile(t('an.avgRating'), rated.length ? avg(rated, e => e.stars).toFixed(2).replace('.', TK.getLang() === 'fr' ? ',' : '.') : '—')}
+      </div>
+      <section class="adm-card"><h2 class="app-h">${esc(t('an.byHour'))}</h2>${vbars(hours)}</section>
+      <div class="adm-grid2 adm-grid2-even">
+        <section class="adm-card"><h2 class="app-h">${esc(t('an.from'))}</h2>${hbars(countBy(created, e => commune(e.from).name))}</section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('an.to'))}</h2>${hbars(countBy(created, e => commune(e.to).name))}</section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('an.routes'))}</h2>${hbars(countBy(created, e => `${commune(e.from).name} → ${commune(e.to).name}`), 6)}</section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('an.vehicles'))}</h2>${hbars(countBy(created, e => t('veh.' + e.vehicle)))}</section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('an.reasons'))}</h2>${hbars(countBy(declined, e => t('dd.' + (e.reason || 'other'))))}</section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('an.cancelStage'))}</h2>${hbars(countBy(cancelled, e => t('an.st.' + (e.stage || 'open'))))}</section>
+      </div>
+      <section class="adm-card"><h2 class="app-h">${esc(t('an.drivers'))}</h2>
+        <div class="table-scroll"><table class="grid-table compact adm-table">
+          <thead><tr><th>${esc(t('ad.col.driver'))}</th><th>${esc(t('an.c.offers'))}</th><th>${esc(t('an.c.counter'))}</th><th>${esc(t('an.c.declines'))}</th><th>${esc(t('an.c.declineRate'))}</th><th>${esc(t('an.c.response'))}</th><th>${esc(t('an.c.done'))}</th><th>${esc(t('an.c.cancel'))}</th><th>${esc(t('an.c.rating'))}</th></tr></thead>
+          <tbody>${drows.map(x => `<tr><td><b>${esc(driverLabel(x.k))}</b></td><td class="mono">${x.offers}</td><td class="mono">${x.counter}</td><td class="mono">${x.declines}</td>
+            <td><span class="pill pill-${x.rate > .5 ? 'cancelled' : x.rate > .25 ? 'open' : 'delivered'}">${pctStr(x.rate)}</span></td>
+            <td class="mono">${x.resp.length ? esc(t('an.min', { n: (mean(x.resp) / 60000).toFixed(1).replace('.', TK.getLang() === 'fr' ? ',' : '.') })) : '—'}</td>
+            <td class="mono">${x.done}</td><td class="mono">${x.cancel}</td><td class="mono">${x.stars.length ? mean(x.stars).toFixed(1) : '—'}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </section>
+      <p class="hint">${esc(t('an.what'))}</p>`;
+  }
+
+  function exportEvents() {
+    const ev = store.state.events;
+    const cols = ['at', 'type', 'orderId', 'from', 'to', 'vehicle', 'need', 'km', 'price', 'asked', 'reference', 'kind', 'driver', 'reason', 'stage', 'by', 'stars', 'delayMs', 'durationMs', 'demo'];
+    const cell = v => v == null ? '' : /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+    const csv = [cols.join(';')].concat(ev.map(e => cols.map(c => cell(c === 'at' ? new Date(e.at).toISOString() : e[c])).join(';'))).join('\n');
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `takaata-evenements-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
   // ---------- APPELS MASQUÉS ----------
   TK.addStrings({
     fr: {
@@ -1787,6 +2008,7 @@
   // ---------- rendu ----------
   function currentRole() { return ROUTES[location.hash.slice(1)] || null; }
 
+  let lastHtml = '';
   function render() {
     const role = currentRole();
     const site = document.getElementById('site');
@@ -1812,7 +2034,11 @@
     const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
     const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
     const call = view.call && role !== 'admin' ? callOverlay() : '';
-    root.innerHTML = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
+    const html = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
+    // Ne remplace l'écran que s'il a changé : évite de perdre un appui pendant un rafraîchissement.
+    if (html === lastHtml && root.innerHTML) return;
+    lastHtml = html;
+    root.innerHTML = html;
 
     Object.entries(keep).forEach(([id, v]) => {
       const el = document.getElementById(id);
@@ -1865,6 +2091,10 @@
       case 'orders': go('orders'); break;
       case 'adm-mod': Object.assign(view.adm, { mod: b.dataset.mod, order: null, driver: null, client: null }); dgo(); break;
       case 'adm-filter': view.adm.filter = b.dataset.f; render(); break;
+      case 'an-period': view.adm.period = +b.dataset.n; render(); break;
+      case 'an-seed': store.seedAnalytics(); break;
+      case 'an-clear': store.clearDemoAnalytics(); break;
+      case 'an-export': exportEvents(); break;
       case 'adm-dtab': view.adm.dtab = b.dataset.t; render(); break;
       case 'adm-order': Object.assign(view.adm, { order: id, driver: null, client: null }); render(); break;
       case 'adm-driver': Object.assign(view.adm, { driver: b.dataset.phone, order: null, client: null }); render(); break;
@@ -1880,7 +2110,11 @@
       case 'hangup': view.call = null; render(); break;
       case 'dtab': view.dtab = b.dataset.tab; view.dmeSub = ''; view.confirmLogout = false; view.supportSent = false; dgo(); break;
       case 'dme-sub': view.dmeSub = b.dataset.sub; view.confirmLogout = false; view.supportSent = false; dgo(); break;
-      case 'd-online': store.setDriver({ online: !store.driver().online }); break;
+      case 'd-online': store.setOnline(!store.driver().online); break;
+      case 'd-goal-edit': view.goalEdit = !view.goalEdit; render(); break;
+      case 'd-goal': view.goalEdit = false; store.setDriver({ goal: +b.dataset.n }); break;
+      case 'd-decline-open': view.declineFor = view.declineFor === id ? null : id; render(); break;
+      case 'd-decline': view.declineFor = null; store.driverDecline(id, b.dataset.r); break;
       case 'd-logout': store.driverLogout(); view.confirmLogout = false; view.dtab = 'jobs'; view.dauth = { mode: 'login', step: 'id', f: newDriverForm(), err: '' }; dgo(); break;
       case 'da-mode': view.dauth = { mode: b.dataset.mode, step: 'id', f: newDriverForm(view.dauth.f.phone), err: '' }; dgo(); break;
       case 'da-prev': {
@@ -2184,7 +2418,21 @@
   });
 
   // Re-rendu sur changement d'état, sauf pendant la saisie du formulaire de commande.
-  store.subscribe(() => { if (currentRole() && view.name !== 'wizard') render(); });
+  let lastTrips = null;
+  store.subscribe(() => {
+    const d = store.driver();
+    if (d) {
+      if (lastTrips != null && d.trips > lastTrips && d.earnings[0]) {
+        const e = d.earnings, goal = d.goal || 15000;
+        const todayNet = e.filter(x => x.at >= today0()).reduce((a, x) => a + x.net, 0);
+        view.celebrate = { net: e[0].net, msg: todayNet >= goal ? t('dh.goalDone') : t('dh.left', { n: fcfa(goal - todayNet) }) };
+        clearTimeout(view.celebrateTimer);
+        view.celebrateTimer = setTimeout(() => { view.celebrate = null; render(); }, 6000);
+      }
+      lastTrips = d.trips;
+    } else lastTrips = null;
+    if (currentRole() && view.name !== 'wizard') render();
+  });
 
   // Simulation : offres, réponses et progression.
   setInterval(() => {

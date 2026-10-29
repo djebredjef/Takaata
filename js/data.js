@@ -35,7 +35,8 @@
     { id: 'yopougon', name: 'Yopougon', lat: 5.345, lon: -4.080 }
   ];
 
-  const NEEDS = ['moving', 'furniture', 'food', 'shop', 'parcel'];
+  // 3 besoins : déménagement (meubles compris), marchandises (vivriers, commerce), colis.
+  const NEEDS = ['moving', 'goods', 'parcel'];
   const PAYMENTS = ['cash', 'orange', 'wave', 'mtn'];
   const STATUSES = ['open', 'assigned', 'pickup', 'loading', 'transit', 'arrived', 'delivered'];
 
