@@ -1171,3 +1171,25 @@ html.sheet-open { overflow: hidden; }
 .live-list li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); }
 .live-list small { grid-column: 2; color: var(--muted); font-size: 12.5px; }
 @media (max-width: 900px) { .live-grid { grid-template-columns: 1fr; } }
+
+/* Vivriers vers Abidjan */
+.need-vivriers { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 8h17v12H2zM19 12h6l5 5v3H19z' fill='none' stroke='%23000' stroke-width='2.5' stroke-linejoin='round'/%3E%3Ccircle cx='8' cy='23' r='3'/%3E%3Ccircle cx='25' cy='23' r='3'/%3E%3Cpath d='M5 4h8' stroke='%23000' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.viv-intro { display: grid; gap: 6px; justify-items: start; padding: 16px; border-radius: var(--r); background: var(--band); color: var(--band-ink); }
+.viv-intro b { font-family: var(--font-display); font-size: 19px; letter-spacing: -0.02em; }
+.viv-intro p { color: var(--band-muted); font-size: 14px; }
+.viv-intro .pill { background: rgba(255, 255, 255, .1); color: var(--band-ink); }
+.viv-form { display: grid; gap: 12px; padding: 14px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
+.viv-form .check small { display: inline; }
+.truck-card { display: grid; gap: 10px; padding: 14px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
+.truck-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.truck-top > div { display: grid; min-width: 0; }
+.truck-top small { color: var(--muted); font-size: 13px; }
+.truck-times { list-style: none; margin: 0; padding: 0 0 0 14px; display: grid; gap: 6px; border-left: 2px dashed var(--line-strong); }
+.truck-times li { display: flex; gap: 10px; align-items: baseline; position: relative; }
+.truck-times li::before { content: ""; position: absolute; left: -20px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--leaf); }
+.truck-times li:last-child::before { background: var(--signal); }
+.truck-times b { font-size: 16px; min-width: 3.2em; }
+.truck-times span { color: var(--muted); font-size: 13.5px; }
+.truck-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
+.truck-foot b { font-size: 17px; margin-left: 4px; }
+.viv-driver .weight-bar i { background: var(--signal); }

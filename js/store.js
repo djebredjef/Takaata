@@ -54,6 +54,7 @@
       leads: [],
       pricing: null,
       events: [],
+      trips: null,      // trajets « Vivriers vers Abidjan » publiés par les chauffeurs
       admin: { ownerHash: '', staff: [] },  // accès à la console : administrateur principal + collaborateurs       // journal d'usage pour les analyses (publication, offres, refus, annulations…)    // grille modifiée depuis l'Admin (null = grille du business plan)
       accounts: {},     // comptes clients par numéro (prototype local ; Firebase Auth au lancement)
       session: null,    // numéro du client connecté
@@ -511,6 +512,135 @@
   }
   function clearDemoAnalytics() { state.events = state.events.filter(e => !e.demo); emit(); }
 
+
+  // --- Vivriers vers Abidjan : trajets retour des chauffeurs, réservation au sac ---
+  // Axe Bouaké → Abidjan. Distances approximatives, à confirmer sur le terrain.
+  const CORRIDOR = {
+    id: 'bouake', stops: [
+      { id: 'bouake', name: 'Bouaké · gare routière', km: 0 },
+      { id: 'tiebissou', name: 'Tiébissou', km: 55 },
+      { id: 'yamoussoukro', name: 'Yamoussoukro · péage', km: 105 },
+      { id: 'toumodi', name: 'Toumodi · carrefour', km: 150 },
+      { id: 'singrobo', name: 'Péage de Singrobo', km: 200 },
+      { id: 'ndouci', name: 'N’Douci', km: 250 },
+      { id: 'gesco', name: 'Gesco · Yopougon (entrée d’Abidjan)', km: 335 }
+    ]
+  };
+  const SPEED_KMH = 60, STOP_MIN = 10, DEPOSIT_RATE = 0.2, FREE_CANCEL_H = 6;
+  const TRIP_STEPS = ['scheduled', 'departed', 'arrived', 'done'];
+  const stopOf = id => CORRIDOR.stops.find(x => x.id === id);
+
+  // Heure de passage à un arrêt : départ + temps de route + 10 min par arrêt desservi avant.
+  function stopTime(trip, stopId) {
+    const a = stopOf(trip.from), b = stopOf(stopId);
+    const served = trip.stops.filter(id => stopOf(id).km > a.km && stopOf(id).km < b.km).length;
+    return trip.depart + (b.km - a.km) / SPEED_KMH * 36e5 + served * STOP_MIN * 60000;
+  }
+  const arrivalTime = trip => stopTime(trip, 'gesco');
+  function tripLoad(trip) {
+    const live = trip.bookings.filter(b => b.status !== 'cancelled');
+    return { units: live.reduce((a, b) => a + b.units, 0), seats: live.reduce((a, b) => a + b.seats, 0) };
+  }
+  function tripsState() { if (!state.trips) seedTrips(); return state.trips; }
+
+  function seedTrips() {
+    const r = rng('trips' + new Date().toDateString());
+    const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    const plan = [[21, 30, 'truck10t', 60, 2, 1500, 2000], [22, 15, 'truck3t', 35, 1, 1800, 2500], [23, 0, 'truck10t', 80, 2, 1200, 2000], [0, 20, 'truck3t', 30, 2, 2000, 2500]];
+    const trips = [];
+    [0, 1].forEach(dd => plan.forEach(([h, m, veh, cap, seats, pu, ps], i) => {
+      const d = new Date(day0.getTime() + (dd + (h < 12 ? 1 : 0)) * 864e5); d.setHours(h, m, 0, 0);
+      const drv = DRIVER_POOL[(i + dd * 3) % DRIVER_POOL.length];
+      const t = {
+        id: `TR-${d.getDate()}${d.getHours()}${i}`, sim: true, driver: drv.name, driverName: drv.name, rating: drv.rating, plate: plateFor(r), vehicle: veh,
+        from: 'bouake', depart: d.getTime(), stops: ['tiebissou', 'yamoussoukro', 'toumodi', 'singrobo', 'ndouci'].filter(() => r() > .2),
+        capacity: cap, seats, pricePerUnit: pu, pricePerSeat: ps, bookings: [], status: 'scheduled', createdAt: Date.now()
+      };
+      if (!t.stops.includes('yamoussoukro')) t.stops.push('yamoussoukro');
+      t.stops.sort((x, y) => stopOf(x).km - stopOf(y).km);
+      // quelques places déjà réservées par d'autres commerçantes
+      const taken = Math.floor(cap * (0.2 + r() * 0.5));
+      t.bookings.push({ id: t.id + '-x', client: 'Autres commerçantes', stop: t.stops[0], units: taken, seats: Math.min(seats - 1, Math.floor(r() * 2)), status: 'booked', other: true });
+      if (d.getTime() > Date.now()) trips.push(t);
+    }));
+    state.trips = (state.trips || []).filter(t => !t.sim && t.depart > Date.now() - 864e5).concat(trips);
+  }
+
+  function publishTrip(trip) {
+    const d = drv();
+    if (!d || d.status !== 'approved') return null;
+    const t = Object.assign({ id: 'TR-' + Date.now().toString(36).toUpperCase(), driver: d.phone, driverName: `${d.firstName} ${d.lastName}`, rating: driverRating(d),
+      plate: d.plate, vehicle: d.vehicle, from: 'bouake', bookings: [], status: 'scheduled', createdAt: Date.now() }, trip);
+    tripsState().unshift(t);
+    track('trip_published', null, { tripId: t.id, driver: d.phone, capacity: t.capacity, seats: t.seats, price: t.pricePerUnit, depart: t.depart });
+    emit();
+    return t;
+  }
+
+  function quoteBooking(trip, units, seats) {
+    const total = units * trip.pricePerUnit + seats * trip.pricePerSeat;
+    return { total, deposit: Math.max(500, roundUp100(total * DEPOSIT_RATE)), fee: Math.round(total * TK.COMMISSION_RATE) };
+  }
+
+  function bookTrip(tripId, req) {
+    const trip = tripsState().find(x => x.id === tripId);
+    if (!trip || trip.status !== 'scheduled') return { ok: false };
+    const load = tripLoad(trip);
+    if (load.units + req.units > trip.capacity || load.seats + req.seats > trip.seats) return { ok: false, full: true };
+    const q = quoteBooking(trip, req.units, req.seats);
+    const u = user();
+    const b = Object.assign({ id: trip.id + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(), client: u ? `${u.firstName} ${u.lastName}` : '', phone: state.session,
+      status: 'booked', at: Date.now() }, req, q);
+    trip.bookings.push(b);
+    track('trip_booked', null, { tripId, stop: req.stop, units: req.units, seats: req.seats, price: q.total, lastMile: !!req.lastMile, driver: trip.driver });
+    emit();
+    return { ok: true, booking: b };
+  }
+
+  function cancelBooking(tripId, bookingId) {
+    const trip = tripsState().find(x => x.id === tripId);
+    const b = trip && trip.bookings.find(x => x.id === bookingId);
+    if (!b || b.status !== 'booked' || trip.status !== 'scheduled') return;
+    b.status = 'cancelled';
+    b.refund = trip.depart - Date.now() > FREE_CANCEL_H * 36e5;
+    track('trip_cancelled', null, { tripId, units: b.units, refund: b.refund, hoursBefore: (trip.depart - Date.now()) / 36e5 });
+    emit();
+  }
+
+  // Avancement du trajet (le chauffeur le fait ; bouton démo côté client).
+  function advanceTrip(tripId) {
+    const trip = tripsState().find(x => x.id === tripId);
+    if (!trip) return;
+    const i = TRIP_STEPS.indexOf(trip.status);
+    if (i < 0 || i >= TRIP_STEPS.length - 1) return;
+    trip.status = TRIP_STEPS[i + 1];
+    trip[trip.status + 'At'] = Date.now();
+    const live = trip.bookings.filter(b => b.status !== 'cancelled' && !b.other);
+    if (trip.status === 'departed') live.forEach(b => { b.status = 'boarded'; });
+    if (trip.status === 'arrived') {
+      live.forEach(b => {
+        b.status = 'arrived';
+        // Suite automatique jusqu'au marché d'Adjamé : commande en ville créée pour la commerçante.
+        if (b.lastMile && b.phone && !b.lastMileOrder) {
+          const o = buildOrder({ need: 'goods', from: 'yopougon', to: 'adjame', fromDetail: 'Gesco', toDetail: 'Marché d’Adjamé', vehicle: b.units > 8 ? 'van1t' : 'tricycle',
+            items: `${b.units} ${b.unitKind === 'sac' ? 'sacs de 50 kg' : b.unitKind === 'carton' ? 'cartons' : 'cageots'} (vivriers)`, weight: '', service: 'transport', helpers: 1,
+            floorsFrom: 0, floorsTo: 0, elevator: false, passengers: b.seats, payment: b.payment || 'cash', when: 'now', packing: false, dismantle: false }, 'me');
+          o.clientPhone = b.phone;
+          state.orders.unshift(o);
+          b.lastMileOrder = o.id;
+          track('created', o, { price: o.price, reference: o.reference, service: 'transport', passengers: b.seats, fromTrip: tripId });
+        }
+      });
+      track('trip_arrived', null, { tripId, onTime: (h => h < 5 || h >= 18)(new Date(arrivalTime(trip)).getHours()), units: tripLoad(trip).units, capacity: trip.capacity, driver: trip.driver });
+    }
+    if (trip.status === 'done') live.forEach(b => { b.status = 'completed'; });
+    emit();
+  }
+
+  function myBookings() {
+    return tripsState().flatMap(trip => trip.bookings.filter(b => b.phone && b.phone === state.session).map(b => ({ trip, b })));
+  }
+
   // --- accès Admin ---
   function adminState() { return state.admin || (state.admin = { ownerHash: '', staff: [] }); }
   function setOwnerHash(hash) { adminState().ownerHash = hash; emit(); }
@@ -568,6 +698,7 @@
   function addLead(lead) { state.leads.push(Object.assign({ at: Date.now() }, lead)); emit(); }
 
   load();
+  if (!state.trips || !state.trips.some(t => t.sim && t.depart > Date.now())) seedTrips();
   applyPricing();
 
   window.TK = Object.assign(window.TK || {}, {
@@ -581,7 +712,9 @@
       setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
       held, available, NEXT, AUTO_CLOSE_MS, canCall,
-      adminState, setOwnerHash, addStaff, removeStaff, touchStaff, DRIVER_POOL
+      adminState, setOwnerHash, addStaff, removeStaff, touchStaff, DRIVER_POOL,
+      CORRIDOR, stopOf, stopTime, arrivalTime, tripLoad, tripsState, publishTrip, quoteBooking, bookTrip, cancelBooking, advanceTrip, myBookings, seedTrips,
+      DEPOSIT_RATE, FREE_CANCEL_H
     }
   });
 })();

@@ -4,7 +4,7 @@
   const { fcfa, esc, fmt } = ui;
 
   const ROUTES = { app: 'client', chauffeur: 'driver', admin: 'admin' };
-  const NEED_VEHICLE = { moving: 'truck3t', goods: 'van1t', parcel: 'tricycle', furniture: 'van1t', food: 'truck3t', shop: 'van1t' };
+  const NEED_VEHICLE = { vivriers: 'truck10t', moving: 'truck3t', goods: 'van1t', parcel: 'tricycle', furniture: 'van1t', food: 'truck3t', shop: 'van1t' };
   const PROGRESS = { open: null, assigned: 0, pickup: 0, loading: 0.04, transit: 0.55, arrived: 1, delivered: 1, cancelled: null };
   const ACTIVE = ['open', 'assigned', 'pickup', 'loading', 'transit', 'arrived'];
 
@@ -87,7 +87,7 @@
         <div class="need-row" role="radiogroup" aria-label="${esc(t('c.hello'))}">
           ${NEEDS.map(n => `<label class="need-chip"><input type="radio" name="need" id="h-need-${n}" value="${n}" data-bind="need"${d.need === n ? ' checked' : ''}><span><i class="need-ic need-${n}" aria-hidden="true"></i>${esc(t('need.' + n))}</span></label>`).join('')}
         </div>
-        <section class="home-veh">
+        ${d.need === 'vivriers' ? vivriersPanel() : `<section class="home-veh">
           ${V().tabs(d.vehicle, 'data-veh-tab')}
           ${V().stage(d.vehicle, 'data-veh-step')}
           <div class="veh-sum">
@@ -116,7 +116,7 @@
             </div>
           </div>
         </section>
-        <p class="hint">${esc(t('h.hint'))}</p>
+        <p class="hint">${esc(t('h.hint'))}</p>`}
       </div>`;
   }
 
@@ -128,13 +128,14 @@
       <section class="app-sec">
         <h1 class="app-title">${esc(t('c.history'))}</h1>
         ${active.length ? `<h2 class="app-h">${esc(t('c.active'))}</h2><div class="stack">${active.map(orderRow).join('')}</div>` : ''}
-        ${past.length ? `<div class="stack">${past.map(orderRow).join('')}</div>` : active.length ? '' : `<p class="empty">${esc(t('c.noHistory'))}</p>`}
+        ${myBookingsBlock()}
+        ${past.length ? `<div class="stack">${past.map(orderRow).join('')}</div>` : active.length || store.myBookings().length ? '' : `<p class="empty">${esc(t('c.noHistory'))}</p>`}
       </section>`;
   }
 
   // Barre du bas (client) : Commander / Mes courses.
   function bottomNav() {
-    const section = { home: 'home', wizard: 'home', orders: 'orders', order: 'orders', me: 'me' }[view.name] || 'home';
+    const section = { home: 'home', wizard: 'home', orders: 'orders', order: 'orders', booking: 'orders', me: 'me' }[view.name] || 'home';
     const item = (act, key, path) => `<button type="button" class="bn-item${section === act ? ' is-on' : ''}" data-act="${act}"${section === act ? ' aria-current="page"' : ''}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><span>${esc(t(key))}</span></button>`;
     return `<nav class="bottom-nav" aria-label="${esc(t('role.client'))}">
@@ -1309,6 +1310,7 @@
     const avail = store.available();
     return `
       ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
+      ${driverTrips(d)}
       ${avail < BALANCE_ALERTS[0] ? `<p class="wallet-alert${avail < BALANCE_ALERTS[1] ? ' is-ko' : ''}">${esc(t(avail < BALANCE_ALERTS[1] ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
       ${d.online && notifState() === 'default' ? `<div class="notif-hint"><span>${esc(t('nt.enableS'))}</span><button class="btn btn-light btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button></div>` : ''}
       ${view.celebrate ? `<div class="celebrate" role="status"><span class="celebrate-burst" aria-hidden="true"></span>
@@ -1548,6 +1550,7 @@
   const AD_MODULES = [
     ['dash', 'M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],
     ['analytics', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
+    ['trips', 'M3 17h13V8H3zM16 11h3l2 3v3h-5zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
     ['live', 'M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
     ['orders', 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4'],
     ['drivers', 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
@@ -1581,7 +1584,7 @@
     const badge = { drivers: pendingDrivers, support: openDisputes };
     const nav = allowed.map(([m, icon]) => `<button type="button" class="adm-nav${a.mod === m ? ' is-on' : ''}" data-act="adm-mod" data-mod="${m}"${a.mod === m ? ' aria-current="page"' : ''}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}"/></svg><span>${esc(t('ad.' + m))}</span>${badge[m] ? `<b class="adm-badge">${badge[m]}</b>` : ''}</button>`).join('');
-    const body = { team: admTeam, live: admLive, analytics: admAnalytics, dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
+    const body = { trips: admTrips, team: admTeam, live: admLive, analytics: admAnalytics, dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
     return `<div class="adm">
       <aside class="adm-side">
         <div class="adm-brand"><span class="brand-mark" aria-hidden="true"></span><div><b>takaata</b><small>${esc(t('ad.brand'))}</small></div></div>
@@ -2026,8 +2029,8 @@
     }
   });
 
-  const ALL_MODS = ['dash', 'analytics', 'live', 'orders', 'drivers', 'clients', 'finance', 'support', 'pricing', 'team'];
-  const STAFF_DEFAULT = ['dash', 'analytics', 'live', 'orders', 'drivers', 'clients', 'support'];
+  const ALL_MODS = ['dash', 'analytics', 'trips', 'live', 'orders', 'drivers', 'clients', 'finance', 'support', 'pricing', 'team'];
+  const STAFF_DEFAULT = ['dash', 'analytics', 'trips', 'live', 'orders', 'drivers', 'clients', 'support'];
   const DURATIONS = [['tm.d1', 864e5], ['tm.d7', 7 * 864e5], ['tm.d30', 30 * 864e5], ['tm.dinf', 0]];
   const genPass = () => { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const r = () => a[Math.floor(Math.random() * a.length)]; return `${r()}${r()}${r()}${r()}-${r()}${r()}${r()}${r()}`; };
   const admHash = pass => hashPass('admin', pass);
@@ -2368,6 +2371,260 @@
     if (lvl > prev) notifyDriver('balance', t(lvl === 2 ? 'nt.low2T' : 'nt.low1T'), t(lvl === 2 ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }), { level: lvl });
   }
 
+  // ---------- VIVRIERS VERS ABIDJAN ----------
+  TK.addStrings({
+    fr: {
+      'need.vivriers': 'Vivriers vers Abidjan', 'needd.vivriers': 'Camions qui descendent de Bouaké, réservation au sac',
+      'vv.title': 'Vivriers vers Abidjan', 'vv.lead': 'Réservez votre place dans un camion qui descend de Bouaké. Plus besoin d’attendre au bord de la route : vous savez à quelle heure il passe.',
+      'vv.axis': 'Axe Bouaké → Abidjan', 'vv.stop': 'Où montez-vous ?', 'vv.when': 'Quand ?', 'vv.tonight': 'Cette nuit', 'vv.tomorrow': 'Demain soir',
+      'vv.load': 'Votre marchandise', 'vv.sac': 'Sacs de 50 kg', 'vv.carton': 'Cartons', 'vv.cageot': 'Cageots', 'vv.qty': 'Quantité',
+      'vv.people': 'Personnes qui voyagent avec la marchandise', 'vv.lastMile': 'Continuer jusqu’au marché d’Adjamé à l’arrivée',
+      'vv.lastMileS': 'Un tricycle ou une camionnette Takaata vous attend à Gesco.', 'vv.results': 'Camions qui passent', 'vv.none': 'Aucun camion avec assez de place pour cette demande. Essayez un autre point de montée ou demain soir.',
+      'vv.passes': 'Passe à {s} vers {h}', 'vv.arrives': 'Arrivée à Gesco vers {h}', 'vv.before5': 'Arrive avant 5 h', 'vv.left': 'Reste {u} places marchandise · {s} place(s) cabine',
+      'vv.perUnit': '{p} / unité', 'vv.perSeat': '{p} / personne', 'vv.total': 'Total', 'vv.reserve': 'Réserver · acompte {p}',
+      'vv.confirmT': 'Confirmer la réservation', 'vv.deposit': 'Acompte à payer maintenant', 'vv.rest': 'Reste à payer au chauffeur, à la montée', 'vv.payWith': 'Payer l’acompte avec',
+      'vv.pay': 'Payer l’acompte {p}', 'vv.depositNote': 'L’acompte bloque votre place. Annulation gratuite jusqu’à {h} h avant le départ ; après, l’acompte revient au chauffeur.',
+      'vv.booked': 'Réservation confirmée', 'vv.full': 'Ce camion n’a plus assez de place. Choisissez-en un autre.', 'vv.my': 'Vivriers vers Abidjan',
+      'vv.code': 'Code à donner au chauffeur à la montée', 'vv.st.booked': 'Réservé', 'vv.st.boarded': 'À bord', 'vv.st.arrived': 'Arrivé à Abidjan', 'vv.st.completed': 'Terminé', 'vv.st.cancelled': 'Annulé',
+      'vv.tl.booked': 'Place réservée', 'vv.tl.departed': 'Le camion a quitté Bouaké', 'vv.tl.arrived': 'Arrivée à Gesco', 'vv.tl.done': 'Trajet terminé',
+      'vv.cancel': 'Annuler la réservation', 'vv.refund': 'Acompte remboursé.', 'vv.noRefund': 'Annulation moins de {h} h avant le départ : l’acompte revient au chauffeur.',
+      'vv.lastMileOrder': 'Votre course vers Adjamé est commandée : les chauffeurs proches font leurs offres.', 'vv.see': 'Voir la course ›',
+      'vv.demoNext': 'Avancer le trajet (démo)', 'vv.example': 'Trajets et prix d’exemple : ils seront remplacés par les vrais trajets des chauffeurs.',
+      'vv.dTitle': 'Trajet retour vers Abidjan', 'vv.dLead': 'Vous revenez de Bouaké ? Remplissez votre camion avec les vivriers des commerçantes.',
+      'vv.publish': 'Publier un trajet retour', 'vv.dDepart': 'Départ de Bouaké', 'vv.dStops': 'Arrêts où vous prenez des marchandises', 'vv.dCap': 'Capacité (sacs de 50 kg ou équivalent)',
+      'vv.dSeats': 'Places en cabine', 'vv.dPrice': 'Votre prix par sac (FCFA)', 'vv.dSeatPrice': 'Votre prix par personne (FCFA)', 'vv.dSend': 'Publier le trajet',
+      'vv.dPublished': 'Trajet publié : les commerçantes de l’axe peuvent réserver.', 'vv.dMine': 'Mes trajets vers Abidjan', 'vv.dFill': 'Rempli à {p}',
+      'vv.dGross': 'Total réservé {p} · votre gain net {n}', 'vv.dNext.scheduled': 'Je pars de Bouaké', 'vv.dNext.departed': 'Arrivé à Gesco', 'vv.dNext.arrived': 'Clôturer le trajet',
+      'vv.dBookings': 'Réservations', 'vv.dNoBook': 'Pas encore de réservation.', 'vv.dCheck': 'code {c}',
+      'vv.dBadTime': 'Choisissez une heure de départ à venir.', 'vv.dBadCap': 'Indiquez une capacité et un prix par sac.',
+      'ad.trips': 'Trajets vivriers', 'vt.trips': 'Trajets à venir', 'vt.fill': 'Remplissage moyen', 'vt.units': 'Unités réservées', 'vt.onTime': 'Arrivées prévues avant 5 h',
+      'vt.col.depart': 'Départ', 'vt.col.arrive': 'Arrivée', 'vt.col.cap': 'Réservé / capacité', 'vt.col.price': 'Prix / sac', 'vt.col.amount': 'Montant'
+    },
+    en: {
+      'need.vivriers': 'Produce to Abidjan', 'needd.vivriers': 'Trucks coming down from Bouaké, book per sack',
+      'vv.title': 'Produce to Abidjan', 'vv.lead': 'Book your space in a truck coming down from Bouaké. No more waiting by the road: you know when it passes.',
+      'vv.axis': 'Bouaké → Abidjan route', 'vv.stop': 'Where do you get on?', 'vv.when': 'When?', 'vv.tonight': 'Tonight', 'vv.tomorrow': 'Tomorrow night',
+      'vv.load': 'Your goods', 'vv.sac': '50 kg sacks', 'vv.carton': 'Boxes', 'vv.cageot': 'Crates', 'vv.qty': 'Quantity',
+      'vv.people': 'People travelling with the goods', 'vv.lastMile': 'Continue to Adjamé market on arrival',
+      'vv.lastMileS': 'A Takaata tricycle or van waits for you at Gesco.', 'vv.results': 'Trucks passing by', 'vv.none': 'No truck with enough space for this request. Try another pickup point or tomorrow night.',
+      'vv.passes': 'Passes {s} around {h}', 'vv.arrives': 'Arrives at Gesco around {h}', 'vv.before5': 'Arrives before 5 am', 'vv.left': '{u} goods spaces left · {s} cab seat(s)',
+      'vv.perUnit': '{p} / unit', 'vv.perSeat': '{p} / person', 'vv.total': 'Total', 'vv.reserve': 'Book · deposit {p}',
+      'vv.confirmT': 'Confirm booking', 'vv.deposit': 'Deposit to pay now', 'vv.rest': 'Balance to pay the driver when boarding', 'vv.payWith': 'Pay the deposit with',
+      'vv.pay': 'Pay deposit {p}', 'vv.depositNote': 'The deposit holds your space. Free cancellation up to {h} h before departure; after that, the deposit goes to the driver.',
+      'vv.booked': 'Booking confirmed', 'vv.full': 'This truck no longer has enough space. Choose another one.', 'vv.my': 'Produce to Abidjan',
+      'vv.code': 'Code to give the driver when boarding', 'vv.st.booked': 'Booked', 'vv.st.boarded': 'On board', 'vv.st.arrived': 'Arrived in Abidjan', 'vv.st.completed': 'Completed', 'vv.st.cancelled': 'Cancelled',
+      'vv.tl.booked': 'Space booked', 'vv.tl.departed': 'The truck left Bouaké', 'vv.tl.arrived': 'Arrival at Gesco', 'vv.tl.done': 'Trip completed',
+      'vv.cancel': 'Cancel booking', 'vv.refund': 'Deposit refunded.', 'vv.noRefund': 'Cancelled less than {h} h before departure: the deposit goes to the driver.',
+      'vv.lastMileOrder': 'Your trip to Adjamé is booked: nearby drivers are sending offers.', 'vv.see': 'See the trip ›',
+      'vv.demoNext': 'Advance the trip (demo)', 'vv.example': 'Example trips and prices: they will be replaced by drivers’ real trips.',
+      'vv.dTitle': 'Return trip to Abidjan', 'vv.dLead': 'Coming back from Bouaké? Fill your truck with the traders’ produce.',
+      'vv.publish': 'Publish a return trip', 'vv.dDepart': 'Departure from Bouaké', 'vv.dStops': 'Stops where you pick up goods', 'vv.dCap': 'Capacity (50 kg sacks or equivalent)',
+      'vv.dSeats': 'Cab seats', 'vv.dPrice': 'Your price per sack (FCFA)', 'vv.dSeatPrice': 'Your price per person (FCFA)', 'vv.dSend': 'Publish trip',
+      'vv.dPublished': 'Trip published: traders along the route can book.', 'vv.dMine': 'My trips to Abidjan', 'vv.dFill': '{p} full',
+      'vv.dGross': 'Total booked {p} · your net {n}', 'vv.dNext.scheduled': 'Leaving Bouaké', 'vv.dNext.departed': 'Arrived at Gesco', 'vv.dNext.arrived': 'Close the trip',
+      'vv.dBookings': 'Bookings', 'vv.dNoBook': 'No bookings yet.', 'vv.dCheck': 'code {c}',
+      'vv.dBadTime': 'Choose a future departure time.', 'vv.dBadCap': 'Enter a capacity and a price per sack.',
+      'ad.trips': 'Produce trips', 'vt.trips': 'Upcoming trips', 'vt.fill': 'Average fill rate', 'vt.units': 'Units booked', 'vt.onTime': 'Planned arrivals before 5 am',
+      'vt.col.depart': 'Departure', 'vt.col.arrive': 'Arrival', 'vt.col.cap': 'Booked / capacity', 'vt.col.price': 'Price / sack', 'vt.col.amount': 'Amount'
+    }
+  });
+
+  const hm = ts => new Date(ts).toLocaleTimeString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+  const dayLabel = ts => new Date(ts).toLocaleDateString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const STOPS = () => store.CORRIDOR.stops;
+  // « Cette nuit » = départs entre 18 h aujourd'hui et 6 h demain ; « Demain soir » = la nuit suivante.
+  function nightRange(which) {
+    const d = new Date(); d.setHours(18, 0, 0, 0);
+    if (new Date().getHours() < 6) d.setDate(d.getDate() - 1);
+    if (which === 'tomorrow') d.setDate(d.getDate() + 1);
+    return [d.getTime(), d.getTime() + 12 * 36e5];
+  }
+  const vivState = () => view.viv || (view.viv = { stop: 'yamoussoukro', night: 'tonight', kind: 'sac', units: 6, seats: 1, lastMile: true, pay: 'orange', confirm: null });
+
+  function vivriersPanel() {
+    const v = vivState();
+    const [a, b] = nightRange(v.night);
+    const trips = store.tripsState().filter(tr => tr.status === 'scheduled' && tr.depart >= a && tr.depart < b && (tr.from === v.stop || tr.stops.includes(v.stop)) && v.stop !== 'gesco')
+      .map(tr => ({ tr, at: store.stopTime(tr, v.stop), load: store.tripLoad(tr) }))
+      .filter(x => x.at > Date.now() && x.load.units + v.units <= x.tr.capacity && x.load.seats + v.seats <= x.tr.seats)
+      .sort((x, y) => store.arrivalTime(x.tr) - store.arrivalTime(y.tr));
+    if (v.confirm) return vivConfirm(v);
+    return `
+      <section class="viv-intro"><b>${esc(t('vv.title'))}</b><p>${esc(t('vv.lead'))}</p><span class="pill">${esc(t('vv.axis'))}</span></section>
+      <section class="viv-form">
+        <label class="field"><span>${esc(t('vv.stop'))}</span><select id="vv-stop">${STOPS().filter(s => s.id !== 'gesco').map(s => `<option value="${s.id}"${s.id === v.stop ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+        <fieldset class="chips"><legend>${esc(t('vv.when'))}</legend>
+          ${['tonight', 'tomorrow'].map(k => `<label class="chip-radio"><input type="radio" name="vv-night" value="${k}" data-viv="night"${v.night === k ? ' checked' : ''}><span>${esc(t('vv.' + k))}</span></label>`).join('')}
+        </fieldset>
+        <fieldset class="chips"><legend>${esc(t('vv.load'))}</legend>
+          ${['sac', 'carton', 'cageot'].map(k => `<label class="chip-radio"><input type="radio" name="vv-kind" value="${k}" data-viv="kind"${v.kind === k ? ' checked' : ''}><span>${esc(t('vv.' + k))}</span></label>`).join('')}
+        </fieldset>
+        <div class="row-2">
+          <div class="counter"><span>${esc(t('vv.qty'))}</span><div class="counter-in">
+            <button type="button" data-act="vv-count" data-f="units" data-d="-1"${v.units <= 1 ? ' disabled' : ''} aria-label="−">−</button><b class="mono">${v.units}</b>
+            <button type="button" data-act="vv-count" data-f="units" data-d="1" aria-label="+">+</button></div></div>
+          <div class="counter"><span>${esc(t('vv.people'))}</span><div class="counter-in">
+            <button type="button" data-act="vv-count" data-f="seats" data-d="-1"${v.seats <= 0 ? ' disabled' : ''} aria-label="−">−</button><b class="mono">${v.seats}</b>
+            <button type="button" data-act="vv-count" data-f="seats" data-d="1"${v.seats >= 2 ? ' disabled' : ''} aria-label="+">+</button></div></div>
+        </div>
+        <label class="check"><input type="checkbox" id="vv-lastMile"${v.lastMile ? ' checked' : ''}><span>${esc(t('vv.lastMile'))}<small class="hint"> · ${esc(t('vv.lastMileS'))}</small></span></label>
+      </section>
+      <section class="app-sec">
+        <h2 class="app-h">${esc(t('vv.results'))}</h2>
+        ${trips.length ? `<div class="stack">${trips.map(({ tr, at, load }) => {
+          const q = store.quoteBooking(tr, v.units, v.seats), arr = store.arrivalTime(tr);
+          return `<article class="truck-card">
+            <div class="truck-top"><div><b>${esc(tr.driverName)}</b><small><span class="stars">★</span> ${tr.rating.toFixed(1)} · ${esc(t('veh.' + tr.vehicle))} · <span class="mono">${esc(tr.plate)}</span></small></div>
+              ${new Date(arr).getHours() < 5 || new Date(arr).getHours() >= 18 ? `<span class="pill pill-delivered">${esc(t('vv.before5'))}</span>` : ''}</div>
+            <ol class="truck-times">
+              <li><b class="mono">${hm(at)}</b><span>${esc(t('vv.passes', { s: store.stopOf(v.stop).name, h: hm(at) }))}</span></li>
+              <li><b class="mono">${hm(arr)}</b><span>${esc(t('vv.arrives', { h: hm(arr) }))}</span></li>
+            </ol>
+            <p class="hint">${esc(t('vv.left', { u: tr.capacity - load.units, s: tr.seats - load.seats }))} · ${esc(t('vv.perUnit', { p: fcfa(tr.pricePerUnit) }))} · ${esc(t('vv.perSeat', { p: fcfa(tr.pricePerSeat) }))}</p>
+            <div class="truck-foot"><span>${esc(t('vv.total'))} <b class="mono">${fcfa(q.total)}</b></span>
+              <button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${tr.id}">${esc(t('vv.reserve', { p: fcfa(q.deposit) }))}</button></div>
+          </article>`;
+        }).join('')}</div>` : `<p class="empty">${esc(t('vv.none'))}</p>`}
+        <p class="hint">${esc(t('vv.example'))}</p>
+      </section>`;
+  }
+
+  function vivConfirm(v) {
+    const tr = store.tripsState().find(x => x.id === v.confirm);
+    if (!tr) { v.confirm = null; return vivriersPanel(); }
+    const q = store.quoteBooking(tr, v.units, v.seats), at = store.stopTime(tr, v.stop);
+    return `<section class="app-sec">
+      <button class="link-btn" type="button" data-act="vv-back">← ${esc(t('w.prev'))}</button>
+      <h1 class="app-title">${esc(t('vv.confirmT'))}</h1>
+      <article class="ticket">
+        <div class="ticket-band"><span class="brand-name">takaata</span><span class="mono">${esc(t('vv.title'))}</span></div>
+        <div class="ticket-main">
+          <div class="ticket-route">
+            <div><small>${esc(t('quote.from'))}</small><b class="ticket-code">${esc(store.stopOf(v.stop).name.slice(0, 3).toUpperCase())}</b><span>${esc(store.stopOf(v.stop).name)} · ${hm(at)}</span></div>
+            <div class="ticket-line" aria-hidden="true"><i></i><span class="mono">${dayLabel(tr.depart)}</span></div>
+            <div class="ta-r"><small>${esc(t('quote.to'))}</small><b class="ticket-code">GES</b><span>Gesco · ${hm(store.arrivalTime(tr))}</span></div>
+          </div>
+          <dl class="ticket-meta">
+            <div><dt>${esc(t('vv.load'))}</dt><dd>${v.units} × ${esc(t('vv.' + v.kind))}</dd></div>
+            <div><dt>${esc(t('w.passengers'))}</dt><dd>${v.seats}</dd></div>
+            <div><dt>${esc(t('ad.col.driver'))}</dt><dd>${esc(tr.driverName)}</dd></div>
+            <div><dt>${esc(t('ad.vehicle'))}</dt><dd>${esc(t('veh.' + tr.vehicle))}</dd></div>
+          </dl>
+        </div>
+        <div class="ticket-tear" aria-hidden="true"></div>
+        <dl class="ticket-prices">
+          <div><dt>${v.units} × ${fcfa(tr.pricePerUnit)}</dt><dd class="mono">${fcfa(v.units * tr.pricePerUnit)}</dd></div>
+          <div><dt>${v.seats} × ${fcfa(tr.pricePerSeat)}</dt><dd class="mono">${fcfa(v.seats * tr.pricePerSeat)}</dd></div>
+          <div class="total"><dt>${esc(t('vv.total'))}</dt><dd class="mono">${fcfa(q.total)}</dd></div>
+          <div class="min"><dt>${esc(t('vv.deposit'))}</dt><dd class="mono">${fcfa(q.deposit)}</dd></div>
+          <div><dt>${esc(t('vv.rest'))}</dt><dd class="mono">${fcfa(q.total - q.deposit)}</dd></div>
+        </dl>
+      </article>
+      ${v.lastMile ? `<p class="notice">${esc(t('vv.lastMile'))} · ${esc(t('vv.lastMileS'))}</p>` : ''}
+      <fieldset class="chips"><legend>${esc(t('vv.payWith'))}</legend>
+        ${PAYMENTS.slice(1).map(p => `<label class="chip-radio"><input type="radio" name="vv-pay" value="${p}" data-viv="pay"${v.pay === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}
+      </fieldset>
+      <p class="hint">${esc(t('vv.depositNote', { h: store.FREE_CANCEL_H }))}</p>
+      ${view.vivErr ? `<p class="field-error">${esc(view.vivErr)}</p>` : ''}
+      <button class="btn btn-signal btn-block" type="button" data-act="vv-book" data-id="${tr.id}">${esc(t('vv.pay', { p: fcfa(q.deposit) }))}</button>
+    </section>`;
+  }
+
+  function bookingView() {
+    const found = store.myBookings().find(x => x.b.id === view.bookingId);
+    if (!found) { view.name = 'orders'; return ordersView(); }
+    const { trip, b } = found;
+    const steps = ['booked', 'departed', 'arrived', 'done'];
+    const idx = Math.max(0, steps.indexOf(trip.status === 'scheduled' ? 'booked' : trip.status));
+    const lm = b.lastMileOrder && store.getOrder(b.lastMileOrder);
+    return `<section class="app-sec">
+      <div class="wiz-head"><button class="link-btn" type="button" data-act="orders">← ${esc(t('c.history'))}</button><span class="mono">${esc(b.id)}</span></div>
+      <div class="order-top"><h1 class="app-title">${esc(store.stopOf(b.stop).name)} → Gesco</h1><span class="pill pill-${b.status === 'cancelled' ? 'cancelled' : b.status === 'booked' ? 'open' : 'delivered'}">${esc(t('vv.st.' + b.status))}</span></div>
+      <p class="sub">${dayLabel(trip.depart)} · ${esc(t('vv.passes', { s: store.stopOf(b.stop).name, h: hm(store.stopTime(trip, b.stop)) }))} · ${esc(t('vv.arrives', { h: hm(store.arrivalTime(trip)) }))}</p>
+      ${b.status !== 'cancelled' ? `<div class="code-box"><span>${esc(t('vv.code'))}</span><b class="mono">${esc((b.phone || '').slice(-4))}</b><small>${esc(t('cv.clientCodeS'))}</small></div>` : ''}
+      <article class="driver-card"><span class="avatar avatar-lg" aria-hidden="true">${initials(trip.driverName)}</span>
+        <div class="driver-info"><small>${esc(t('t.driver'))}</small><b>${esc(trip.driverName)}</b><span><span class="stars">★</span> ${trip.rating.toFixed(1)} · ${esc(t('veh.' + trip.vehicle))}</span></div>
+        <div class="plate mono">${esc(trip.plate)}</div></article>
+      ${b.status === 'cancelled' ? '' : `<ol class="timeline">${steps.map((s, i) => `<li class="${i < idx ? 'is-done' : i === idx ? 'is-now' : ''}"><span>${esc(t('vv.tl.' + s))}</span><small class="mono">${s === 'booked' ? hm(b.at) : trip[s + 'At'] ? hm(trip[s + 'At']) : ''}</small></li>`).join('')}</ol>`}
+      <dl class="kv">
+        <div><dt>${esc(t('vv.load'))}</dt><dd>${b.units} × ${esc(t('vv.' + b.unitKind))} · ${b.seats} pers.</dd></div>
+        <div><dt>${esc(t('vv.total'))}</dt><dd class="mono">${fcfa(b.total)}</dd></div>
+        <div><dt>${esc(t('vv.deposit'))}</dt><dd class="mono">${fcfa(b.deposit)} · ${esc(t('pay.' + b.payment))}</dd></div>
+        <div><dt>${esc(t('vv.rest'))}</dt><dd class="mono">${fcfa(b.total - b.deposit)}</dd></div>
+      </dl>
+      ${b.status === 'cancelled' ? `<p class="notice">${esc(b.refund ? t('vv.refund') : t('vv.noRefund', { h: store.FREE_CANCEL_H }))}</p>` : ''}
+      ${lm ? `<div class="confirm-box"><p>${esc(t('vv.lastMileOrder'))}</p><button class="btn btn-signal btn-sm" type="button" data-act="open-order" data-id="${lm.id}">${esc(t('vv.see'))}</button></div>` : ''}
+      ${trip.status !== 'done' && b.status !== 'cancelled' && trip.sim ? `<button class="link-btn demo-btn" type="button" data-act="vv-advance" data-id="${trip.id}">${esc(t('vv.demoNext'))} →</button>` : ''}
+      ${trip.status === 'scheduled' && b.status === 'booked' ? `<button class="link-btn danger" type="button" data-act="vv-cancel" data-trip="${trip.id}" data-id="${b.id}">${esc(t('vv.cancel'))}</button>` : ''}
+    </section>`;
+  }
+
+  function myBookingsBlock() {
+    const list = store.myBookings();
+    if (!list.length) return '';
+    return `<h2 class="app-h">${esc(t('vv.my'))}</h2><div class="stack">${list.map(({ trip, b }) => `<button class="order-row" type="button" data-act="vv-open" data-id="${b.id}">
+      <span class="order-row-main"><b>${esc(store.stopOf(b.stop).name)} → Gesco</b><small>${dayLabel(trip.depart)} · ${hm(store.stopTime(trip, b.stop))} · ${b.units} × ${esc(t('vv.' + b.unitKind))}</small></span>
+      <span class="order-row-side"><span class="mono">${fcfa(b.total)}</span><span class="pill pill-${b.status === 'cancelled' ? 'cancelled' : b.status === 'booked' ? 'open' : 'delivered'}">${esc(t('vv.st.' + b.status))}</span></span></button>`).join('')}</div>`;
+  }
+
+  // Côté chauffeur : publier un trajet retour et suivre ses réservations.
+  function driverTrips(d) {
+    const mine = store.tripsState().filter(tr => tr.driver === d.phone && tr.status !== 'done');
+    const f = view.dtripForm;
+    const nextHour = () => { const x = new Date(Date.now() + 36e5); x.setMinutes(0, 0, 0); if (x.getHours() < 18 && x.getHours() > 6) x.setHours(21); const p = n => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}T${p(x.getHours())}:00`; };
+    return `<section class="app-sec viv-driver">
+      <div class="viv-intro"><b>${esc(t('vv.dTitle'))}</b><p>${esc(t('vv.dLead'))}</p><span class="pill">${esc(t('vv.axis'))}</span></div>
+      ${f ? `<form class="auth-form" id="dTripForm" novalidate>
+          <label class="field"><span>${esc(t('vv.dDepart'))}</span><input id="tf-depart" type="datetime-local" value="${esc(f.depart || nextHour())}"></label>
+          <fieldset class="chips"><legend>${esc(t('vv.dStops'))}</legend>
+            ${STOPS().filter(s => !['bouake', 'gesco'].includes(s.id)).map(s => `<label class="chip-radio"><input type="checkbox" data-tstop="${s.id}"${(f.stops || ['yamoussoukro', 'toumodi']).includes(s.id) ? ' checked' : ''}><span>${esc(s.name)}</span></label>`).join('')}
+          </fieldset>
+          <div class="row-2">
+            <label class="field"><span>${esc(t('vv.dCap'))}</span><input id="tf-cap" type="number" inputmode="numeric" min="1" value="${esc(f.capacity || 40)}"></label>
+            <label class="field"><span>${esc(t('vv.dSeats'))}</span><select id="tf-seats">${[0, 1, 2].map(n => `<option${n === (f.seats ?? 2) ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+            <label class="field"><span>${esc(t('vv.dPrice'))}</span><input id="tf-price" type="number" inputmode="numeric" min="100" step="100" value="${esc(f.pricePerUnit || 1500)}"></label>
+            <label class="field"><span>${esc(t('vv.dSeatPrice'))}</span><input id="tf-seatPrice" type="number" inputmode="numeric" min="0" step="100" value="${esc(f.pricePerSeat || 2000)}"></label>
+          </div>
+          <p class="field-error" id="tf-err" hidden></p>
+          <div class="btn-row"><button class="btn btn-signal" type="submit">${esc(t('vv.dSend'))}</button><button class="btn btn-ghost" type="button" data-act="dtrip-close">${esc(t('a.resetNo'))}</button></div>
+        </form>`
+        : `<button class="btn btn-signal btn-block" type="button" data-act="dtrip-open">${esc(t('vv.publish'))}</button>`}
+      ${mine.length ? `<h2 class="app-h">${esc(t('vv.dMine'))}</h2>${mine.map(tr => {
+        const load = store.tripLoad(tr), gross = tr.bookings.filter(b => b.status !== 'cancelled' && !b.other).reduce((a, b) => a + b.total, 0);
+        return `<article class="request request-active">
+          <div class="request-top"><div><b>${dayLabel(tr.depart)} · ${hm(tr.depart)} → ${hm(store.arrivalTime(tr))}</b><small>${tr.stops.map(id => esc(store.stopOf(id).name)).join(' · ')}</small></div>
+            <span class="pill pill-${tr.status === 'scheduled' ? 'open' : 'delivered'}">${esc(t('vv.tl.' + (tr.status === 'scheduled' ? 'booked' : tr.status)))}</span></div>
+          <div class="weight-bar" aria-hidden="true"><i style="width:${Math.round(load.units / tr.capacity * 100)}%"></i></div>
+          <p class="hint">${esc(t('vv.dFill', { p: pctStr(load.units / tr.capacity) }))} · ${load.units}/${tr.capacity} · ${load.seats}/${tr.seats} pers. · ${esc(t('vv.dGross', { p: fcfa(gross), n: fcfa(gross - Math.round(gross * TK.COMMISSION_RATE)) }))}</p>
+          <h3 class="app-h">${esc(t('vv.dBookings'))}</h3>
+          ${tr.bookings.filter(b => !b.other).length ? `<ul class="ledger-list">${tr.bookings.filter(b => !b.other).map(b => `<li><span><b>${esc(b.client)}</b><small>${esc(store.stopOf(b.stop).name)} · ${hm(store.stopTime(tr, b.stop))} · ${b.units} × ${esc(t('vv.' + b.unitKind))} · ${b.seats} pers. · ${esc(t('vv.dCheck', { c: (b.phone || '').slice(-4) }))}</small></span><span class="mono">${fmt(b.total)}</span></li>`).join('')}</ul>` : `<p class="empty">${esc(t('vv.dNoBook'))}</p>`}
+          ${tr.status !== 'done' ? `<button class="btn btn-signal btn-block" type="button" data-act="dtrip-next" data-id="${tr.id}">${esc(t('vv.dNext.' + tr.status))}</button>` : ''}
+        </article>`;
+      }).join('')}` : ''}
+    </section>`;
+  }
+
+  function admTrips() {
+    const trips = store.tripsState();
+    const upcoming = trips.filter(tr => tr.status === 'scheduled');
+    const fills = trips.map(tr => store.tripLoad(tr).units / tr.capacity);
+    const arrivals = store.state.events.filter(e => e.type === 'trip_arrived');
+    return `<div class="adm-tiles">
+        ${tile(t('vt.trips'), fmt(upcoming.length))}
+        ${tile(t('vt.fill'), trips.length ? pctStr(fills.reduce((a, x) => a + x, 0) / trips.length) : '—', '', 'accent')}
+        ${tile(t('vt.units'), fmt(trips.reduce((a, tr) => a + store.tripLoad(tr).units, 0)))}
+        ${tile(t('vt.onTime'), arrivals.length ? pctStr(arrivals.filter(e => e.onTime).length / arrivals.length) : '—', '', 'ok')}
+      </div>
+      ${trips.length ? `<div class="table-scroll"><table class="grid-table compact adm-table">
+        <thead><tr><th>${esc(t('vt.col.depart'))}</th><th>${esc(t('vt.col.arrive'))}</th><th>${esc(t('ad.col.driver'))}</th><th>${esc(t('a.colVehicle'))}</th><th>${esc(t('vt.col.cap'))}</th><th>${esc(t('vt.col.price'))}</th><th>${esc(t('vt.col.amount'))}</th><th>${esc(t('a.colStatus'))}</th></tr></thead>
+        <tbody>${trips.slice().sort((a, b) => a.depart - b.depart).map(tr => { const l = store.tripLoad(tr); const amt = tr.bookings.filter(b => b.status !== 'cancelled' && !b.other).reduce((a, b) => a + b.total, 0);
+          return `<tr><td>${dayLabel(tr.depart)} ${hm(tr.depart)}</td><td>${hm(store.arrivalTime(tr))}</td><td>${esc(tr.driverName)}</td><td>${esc(t('veh.' + tr.vehicle))}</td>
+            <td class="mono">${l.units} / ${tr.capacity} (${pctStr(l.units / tr.capacity)})</td><td class="mono">${fmt(tr.pricePerUnit)}</td><td class="mono">${fmt(amt)}</td>
+            <td><span class="pill pill-${tr.status === 'scheduled' ? 'open' : 'delivered'}">${esc(t('vv.tl.' + (tr.status === 'scheduled' ? 'booked' : tr.status)))}</span></td></tr>`; }).join('')}</tbody>
+      </table></div>` : `<p class="empty">${esc(t('ad.none'))}</p>`}
+      <p class="hint">${esc(t('vv.example'))}</p>`;
+  }
+
   // ---------- APPELS MASQUÉS ----------
   TK.addStrings({
     fr: {
@@ -2447,7 +2704,7 @@
     // Le choix facultatif du mot de passe suit l'inscription, avant d'entrer dans l'app.
     const signedIn = !!store.user() && view.auth.step !== 'setpass';
     if (role === 'client' && !signedIn) body = authView();
-    else if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : view.name === 'me' ? meView() : clientHome();
+    else if (role === 'client') body = view.name === 'wizard' ? wizard() : view.name === 'order' ? orderView() : view.name === 'orders' ? ordersView() : view.name === 'me' ? meView() : view.name === 'booking' ? bookingView() : clientHome();
     else if (role === 'driver') body = store.driver() ? driverApp() : driverAuthView();
     else body = adminView();
 
@@ -2509,6 +2766,23 @@
     switch (b.dataset.act) {
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
+      case 'vv-count': { const v = vivState(), f = b.dataset.f; v[f] = Math.max(f === 'units' ? 1 : 0, Math.min(f === 'units' ? 200 : 2, v[f] + +b.dataset.d)); render(); break; }
+      case 'vv-pick': vivState().confirm = id; view.vivErr = ''; dgo(); break;
+      case 'vv-back': vivState().confirm = null; dgo(); break;
+      case 'vv-book': {
+        const v = vivState();
+        const res = store.bookTrip(id, { stop: v.stop, unitKind: v.kind, units: v.units, seats: v.seats, lastMile: v.lastMile, payment: v.pay });
+        if (!res.ok) { view.vivErr = t('vv.full'); render(); break; }
+        v.confirm = null;
+        ui.toast(t('vv.booked'));
+        go('booking', { bookingId: res.booking.id });
+        break;
+      }
+      case 'vv-open': go('booking', { bookingId: id }); break;
+      case 'vv-cancel': store.cancelBooking(b.dataset.trip, id); break;
+      case 'vv-advance': case 'dtrip-next': store.advanceTrip(id); break;
+      case 'dtrip-open': view.dtripForm = {}; render(); break;
+      case 'dtrip-close': view.dtripForm = null; render(); break;
       case 'adm-mod': Object.assign(view.adm, { mod: b.dataset.mod, order: null, driver: null, client: null }); dgo(); break;
       case 'adm-filter': view.adm.filter = b.dataset.f; render(); break;
       case 'an-period': view.adm.period = +b.dataset.n; view.aiSummary = ''; render(); break;
@@ -2715,6 +2989,9 @@
       if (!el.matches('input[type=text], input[type=tel], input[type=number], input:not([type])')) render();
       return;
     }
+    if (el.id === 'vv-stop') { vivState().stop = el.value; render(); return; }
+    if (el.id === 'vv-lastMile') { vivState().lastMile = el.checked; return; }
+    if (el.dataset.viv) { vivState()[el.dataset.viv] = el.value; render(); return; }
     if (el.id === 'adm-reason') { view.adm.reason = el.value; return; }
     if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
     if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
@@ -2754,6 +3031,19 @@
     const f = e.target;
     if (f.id === 'authForm') { submitAuth(); return; }
     if (f.id === 'admGateForm') { submitAdmGate(); return; }
+    if (f.id === 'dTripForm') {
+      const err = document.getElementById('tf-err');
+      const depart = new Date(document.getElementById('tf-depart').value).getTime();
+      const capacity = +document.getElementById('tf-cap').value, price = +document.getElementById('tf-price').value;
+      if (!depart || depart < Date.now()) { err.textContent = t('vv.dBadTime'); err.hidden = false; return; }
+      if (!(capacity > 0) || !(price > 0)) { err.textContent = t('vv.dBadCap'); err.hidden = false; return; }
+      const stops = Array.from(f.querySelectorAll('input[data-tstop]:checked')).map(x => x.dataset.tstop).sort((a, b) => store.stopOf(a).km - store.stopOf(b).km);
+      store.publishTrip({ depart, stops, capacity, seats: +document.getElementById('tf-seats').value, pricePerUnit: price, pricePerSeat: +document.getElementById('tf-seatPrice').value || 0 });
+      view.dtripForm = null;
+      ui.toast(t('vv.dPublished'));
+      render();
+      return;
+    }
     if (f.id === 'teamForm') {
       const tf = view.teamForm, err = document.getElementById('tm-err');
       tf.name = document.getElementById('tm-name').value.trim();

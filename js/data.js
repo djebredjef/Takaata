@@ -36,7 +36,7 @@
   ];
 
   // 3 besoins : déménagement (meubles compris), marchandises (vivriers, commerce), colis.
-  const NEEDS = ['moving', 'goods', 'parcel'];
+  const NEEDS = ['moving', 'vivriers', 'goods', 'parcel'];  // + vivriers : axe Bouaké → Abidjan, réservation au sac
   const PAYMENTS = ['cash', 'orange', 'wave', 'mtn'];
   const STATUSES = ['open', 'assigned', 'pickup', 'loading', 'transit', 'arrived', 'delivered'];
 
