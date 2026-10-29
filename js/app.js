@@ -42,12 +42,6 @@
 
   // ---------- CLIENT ----------
   const V = () => TK.vehicles;
-  function servicePrices(d, kmVal) {
-    return {
-      handling: quote(d.vehicle, kmVal, { service: 'handling', helpers: Math.max(1, d.helpers || 1), floorsFrom: d.floorsFrom, floorsTo: d.floorsTo, elevator: d.elevator }).reference,
-      transport: quote(d.vehicle, kmVal, { service: 'transport' }).reference
-    };
-  }
   const code = id => commune(id).name.normalize('NFD').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
 
   // Poids estimé à partir des objets cochés (le client peut le corriger).
@@ -182,7 +176,6 @@
 
     if (step === 3) {
       const handling = d.service === 'handling';
-      const prices = servicePrices(d, kmVal);
       const spec = V().SPECS[d.vehicle];
       const est = estimatedKg(d), kg = loadKg(d);
       const over = kg > spec.payloadKg;
@@ -192,7 +185,6 @@
           <input type="radio" name="service" id="w-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
           <span class="svc-check" aria-hidden="true"></span>
           <span class="svc-txt"><b>${esc(t('svc.' + kind))}</b><small>${esc(t('svc.' + kind + 'D'))}</small></span>
-          <span class="svc-price"><b class="mono">${fmt(prices[kind])}</b><small>FCFA · ${esc(t('svc.from'))}</small></span>
         </label>`;
       const keys = V().PICK.filter(k => spec.items.some(([key]) => key === k) || (d.itemsQty[k] || 0) > 0);
       const rest = V().PICK.filter(k => !keys.includes(k));
@@ -223,7 +215,6 @@
             ${counter('floorsTo', t('w.floorsTo'), d.floorsTo, 0, 20)}
           </div>
           <label class="check"><input type="checkbox" id="w-elevator" data-bind="elevator"${d.elevator ? ' checked' : ''}><span>${esc(t('w.elevator'))}</span></label>
-          <p class="hint">${esc(t('w.perHelper', { p: fcfa(TK.OPTIONS.helper) }))} · ${esc(t('w.perFloor', { p: fcfa(TK.OPTIONS.floor) }))}</p>
         </div>` : ''}
 
         <section class="items-pick">
@@ -307,7 +298,7 @@
         <h1 class="app-title">${esc(t(titles[step]))}</h1>
         <form class="wiz-form" id="wizForm" novalidate>${body}
           <div class="wiz-actions">
-            <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? 'w.publish' : 'w.next'))} · ${fcfa(step === 4 ? d.price : q.reference)}</button>
+            <button class="btn btn-signal btn-block" type="submit">${esc(t(step === 4 ? 'w.publish' : 'w.next'))}${step === 4 ? ` · ${fcfa(d.price)}` : ''}</button>
           </div>
         </form>
       </section>`;
