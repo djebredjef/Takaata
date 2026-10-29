@@ -1,5 +1,5 @@
 // Service worker Takaata : l'app s'ouvre même sans réseau (coque mise en cache).
-const CACHE = 'takaata-v3';
+const CACHE = 'takaata-v4';
 const SHELL = [
   './', './index.html', './css/style.css', './manifest.webmanifest',
   './js/data.js', './js/i18n.js', './js/store.js', './js/ui.js', './js/vehicles.js', './js/site.js', './js/app.js',
@@ -31,4 +31,15 @@ self.addEventListener('fetch', e => {
       })
       .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
   );
+});
+
+// Clic sur une notification chauffeur : « Accepter » envoie l'offre, « Voir » ouvre l'app.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const data = e.notification.data || {};
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const msg = { type: 'tk-notif', action: e.action || 'open', orderId: data.orderId || null };
+    if (list.length) { list[0].postMessage(msg); return list[0].focus(); }
+    return self.clients.openWindow('./#chauffeur');
+  }));
 });

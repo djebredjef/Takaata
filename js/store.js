@@ -53,7 +53,8 @@
       reports: [],
       leads: [],
       pricing: null,
-      events: [],       // journal d'usage pour les analyses (publication, offres, refus, annulations…)    // grille modifiée depuis l'Admin (null = grille du business plan)
+      events: [],
+      admin: { ownerHash: '', staff: [] },  // accès à la console : administrateur principal + collaborateurs       // journal d'usage pour les analyses (publication, offres, refus, annulations…)    // grille modifiée depuis l'Admin (null = grille du business plan)
       accounts: {},     // comptes clients par numéro (prototype local ; Firebase Auth au lancement)
       session: null,    // numéro du client connecté
       seeded: false
@@ -391,6 +392,12 @@
         changed = true;
       }
     }
+    const me = drv();
+    if (me && me.online && me.status === 'approved' && !me.suspended && now - lastSpawn > 25000) {
+      const waiting = state.orders.filter(o => o.status === 'open' && o.vehicle === me.vehicle && !(me.declined && me.declined[o.id])).length;
+      if (waiting < 3) { const o = spawnRequest(me.vehicle); events.push({ type: 'request', order: o }); changed = true; }
+      lastSpawn = now;
+    }
     for (const d of Object.values(state.driverAccounts)) {
       if (d.status === 'pending' && now - d.submittedAt >= DEMO_REVIEW_MS) {
         d.status = 'approved'; d.reviewedAt = now; changed = true;
@@ -402,11 +409,11 @@
   }
 
   function reset() {
-    const { lang, accounts, session, driverAccounts, driverSession } = state;
+    const { lang, accounts, session, driverAccounts, driverSession, admin } = state;
     state = defaultState();
     // Les comptes restent ; soldes et gains des chauffeurs repartent de zéro.
     Object.values(driverAccounts).forEach(d => Object.assign(d, { online: false, balance: 0, holds: {}, ledger: [], digitalEarnings: 0, earnings: [], trips: 0, ratingSum: 0, ratingCount: 0 }));
-    Object.assign(state, { lang, accounts, session, driverAccounts, driverSession });
+    Object.assign(state, { lang, accounts, session, driverAccounts, driverSession, admin });
     seed();
     emit();
   }
@@ -504,6 +511,36 @@
   }
   function clearDemoAnalytics() { state.events = state.events.filter(e => !e.demo); emit(); }
 
+  // --- accès Admin ---
+  function adminState() { return state.admin || (state.admin = { ownerHash: '', staff: [] }); }
+  function setOwnerHash(hash) { adminState().ownerHash = hash; emit(); }
+  function addStaff(member) { adminState().staff.push(Object.assign({ id: 'st' + Date.now().toString(36), createdAt: Date.now(), lastLogin: null }, member)); emit(); }
+  function removeStaff(id) { const a = adminState(); a.staff = a.staff.filter(m => m.id !== id); emit(); }
+  function touchStaff(id) { const m = adminState().staff.find(x => x.id === id); if (m) { m.lastLogin = Date.now(); emit(); } }
+
+  // --- demandes entrantes simulées (pour la démonstration côté chauffeur) ---
+  const SAMPLE_LOADS = {
+    tricycle: [['parcel', '8 cartons de marchandises', '90 kg'], ['goods', '10 sacs d’oignons', '250 kg']],
+    van1t: [['moving', 'Lit 2 places, 1 réfrigérateur, 6 cartons', '220 kg'], ['goods', '20 casiers de boissons', '300 kg'], ['moving', 'Canapé 3 places, table et 4 chaises', '150 kg']],
+    truck3t: [['moving', 'Appartement 3 pièces', '1 200 kg'], ['goods', '60 sacs de riz de 25 kg', '1 500 kg']],
+    truck10t: [['goods', 'Ciment : 150 sacs de 50 kg', '7 500 kg'], ['goods', 'Stock de grossiste, 12 palettes', '6 000 kg']]
+  };
+  const CLIENTS = ['Mariam K.', 'Boutique Nanan', 'Serge A.', 'Aïcha T.', 'Quincaillerie du Rail', 'Jean-Marc B.', 'Fatou D.', 'Maquis Chez Tantie'];
+  let lastSpawn = 0;
+  function spawnRequest(vehicleId) {
+    const r = rng('spawn' + Date.now());
+    const pick = arr => arr[Math.floor(r() * arr.length)];
+    const from = pick(TK.COMMUNES).id; let to = pick(TK.COMMUNES).id; if (to === from) to = pick(TK.COMMUNES).id;
+    const [need, items, weight] = pick(SAMPLE_LOADS[vehicleId]);
+    const handling = need === 'moving';
+    const o = buildOrder({ need, from, to, vehicle: vehicleId, items, weight, service: handling ? 'handling' : 'transport', helpers: 1, floorsFrom: handling ? Math.floor(r() * 3) : 0,
+      floorsTo: 0, elevator: false, passengers: Math.floor(r() * 2), payment: pick(TK.PAYMENTS), client: pick(CLIENTS), fromDetail: '', toDetail: '', when: 'now', packing: false, dismantle: false }, 'other');
+    o.spawned = true;
+    state.orders.unshift(o);
+    track('created', o, { price: o.price, reference: o.reference, service: o.service, passengers: o.passengers });
+    return o;
+  }
+
   function setDriver(patch) { if (drv()) { Object.assign(drv(), patch); emit(); } }
 
   // --- comptes chauffeurs ---
@@ -543,7 +580,8 @@
       driverDecline, setOnline, onlineMsSince, seedAnalytics, clearDemoAnalytics,
       setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
-      held, available, NEXT, AUTO_CLOSE_MS, canCall
+      held, available, NEXT, AUTO_CLOSE_MS, canCall,
+      adminState, setOwnerHash, addStaff, removeStaff, touchStaff, DRIVER_POOL
     }
   });
 })();

@@ -1309,7 +1309,8 @@
     const avail = store.available();
     return `
       ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
-      ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
+      ${avail < BALANCE_ALERTS[0] ? `<p class="wallet-alert${avail < BALANCE_ALERTS[1] ? ' is-ko' : ''}">${esc(t(avail < BALANCE_ALERTS[1] ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
+      ${d.online && notifState() === 'default' ? `<div class="notif-hint"><span>${esc(t('nt.enableS'))}</span><button class="btn btn-light btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button></div>` : ''}
       ${view.celebrate ? `<div class="celebrate" role="status"><span class="celebrate-burst" aria-hidden="true"></span>
         <b>${esc(t('dh.done'))}</b><span class="mono">+ ${fcfa(view.celebrate.net)}</span><small>${esc(view.celebrate.msg)}</small></div>` : ''}
       ${mineActive.length ? `<section class="app-sec"><h2 class="app-h">${esc(t('d.myCourse'))}</h2>${mineActive.map(driverCourse).join('')}</section>` : ''}
@@ -1404,6 +1405,7 @@
           <button type="button" class="chip-btn${TK.getLang() === 'fr' ? ' is-on' : ''}" data-act="set-lang" data-lang="fr">Français</button>
           <button type="button" class="chip-btn${TK.getLang() === 'en' ? ' is-on' : ''}" data-act="set-lang" data-lang="en">English</button>
         </fieldset>
+        ${notifSettings()}
         ${dLogoutBlock()}</section>`;
     }
     const rating = store.driverRating(d);
@@ -1546,12 +1548,14 @@
   const AD_MODULES = [
     ['dash', 'M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],
     ['analytics', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
+    ['live', 'M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
     ['orders', 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4'],
     ['drivers', 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
     ['clients', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-4-5.6'],
     ['finance', 'M3 7h18v12H3zM3 7l3-3h12l3 3M16 13h2'],
     ['support', 'M4 13a8 8 0 0 1 16 0v4h-4v-5h4M4 12h4v5H4z'],
-    ['pricing', 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01']
+    ['pricing', 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01'],
+    ['team', 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4']
   ];
   if (!view.adm) view.adm = { period: 30, mod: 'dash', filter: 'all', q: '', order: null, driver: null, client: null, dtab: 'pending', reason: 'ad.r1' };
 
@@ -1566,21 +1570,26 @@
     : `<span class="pill pill-${d.status === 'approved' ? 'delivered' : d.status === 'rejected' ? 'cancelled' : 'open'}">${esc(t('st.' + d.status))}</span>`;
 
   function adminView() {
+    const sess = admSession();
+    if (!sess) return adminGate();
     const a = view.adm;
     const s = store.state;
+    const allowed = AD_MODULES.filter(([m]) => sess.perms.includes(m) && (m !== 'team' || sess.role === 'owner'));
+    if (!allowed.some(([m]) => m === a.mod)) a.mod = allowed[0][0];
     const pendingDrivers = Object.values(s.driverAccounts).filter(d => d.status === 'pending').length;
     const openDisputes = s.reports.filter(r => !r.resolved).length;
     const badge = { drivers: pendingDrivers, support: openDisputes };
-    const nav = AD_MODULES.map(([m, icon]) => `<button type="button" class="adm-nav${a.mod === m ? ' is-on' : ''}" data-act="adm-mod" data-mod="${m}"${a.mod === m ? ' aria-current="page"' : ''}>
+    const nav = allowed.map(([m, icon]) => `<button type="button" class="adm-nav${a.mod === m ? ' is-on' : ''}" data-act="adm-mod" data-mod="${m}"${a.mod === m ? ' aria-current="page"' : ''}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}"/></svg><span>${esc(t('ad.' + m))}</span>${badge[m] ? `<b class="adm-badge">${badge[m]}</b>` : ''}</button>`).join('');
-    const body = { analytics: admAnalytics, dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
+    const body = { team: admTeam, live: admLive, analytics: admAnalytics, dash: admDash, orders: admOrders, drivers: admDrivers, clients: admClients, finance: admFinance, support: admSupport, pricing: admPricing }[a.mod]();
     return `<div class="adm">
       <aside class="adm-side">
         <div class="adm-brand"><span class="brand-mark" aria-hidden="true"></span><div><b>takaata</b><small>${esc(t('ad.brand'))}</small></div></div>
         <label class="adm-city"><span>${esc(t('ad.city'))}</span><select id="adm-city"><option>Abidjan</option></select></label>
         <nav class="adm-navs" aria-label="${esc(t('role.admin'))}">${nav}</nav>
         <div class="adm-foot">
-          ${view.confirmReset ? `<div class="confirm-inline"><p>${esc(t('a.resetConfirm'))}</p><div class="btn-row">
+          <div class="adm-user"><b>${esc(sess.name)}</b><button class="link-btn" type="button" data-act="adm-logout">${esc(t('ax.logout'))}</button></div>
+          ${sess.role !== 'owner' ? '' : view.confirmReset ? `<div class="confirm-inline"><p>${esc(t('a.resetConfirm'))}</p><div class="btn-row">
             <button class="btn btn-danger btn-sm" type="button" data-act="reset-yes">${esc(t('a.resetYes'))}</button>
             <button class="btn btn-ghost btn-sm" type="button" data-act="reset-no">${esc(t('a.resetNo'))}</button></div></div>`
             : `<button class="link-btn danger" type="button" data-act="reset-ask">${esc(t('ad.reset'))}</button>`}
@@ -1912,6 +1921,7 @@
         ${tile(t('an.declines'), fmt(declined.length))}
         ${tile(t('an.avgRating'), rated.length ? avg(rated, e => e.stars).toFixed(2).replace('.', TK.getLang() === 'fr' ? ',' : '.') : '—')}
       </div>
+      ${insightsBlock(ev)}
       <section class="adm-card"><h2 class="app-h">${esc(t('an.byHour'))}</h2>${vbars(hours)}</section>
       <div class="adm-grid2 adm-grid2-even">
         <section class="adm-card"><h2 class="app-h">${esc(t('an.from'))}</h2>${hbars(countBy(created, e => commune(e.from).name))}</section>
@@ -1946,6 +1956,416 @@
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  // ---------- ADMIN · accès, équipe, alertes intelligentes, carte en direct ----------
+  TK.addStrings({
+    fr: {
+      'ad.live': 'Carte en direct', 'ad.team': 'Équipe et accès',
+      'ax.setupT': 'Créer le mot de passe administrateur', 'ax.setupS': 'Ce mot de passe principal donne accès à toute la console. Gardez-le pour vous.',
+      'ax.loginT': 'Console Takaata', 'ax.loginS': 'Entrez votre mot de passe administrateur ou le mot de passe que l’on vous a confié.',
+      'ax.pass': 'Mot de passe', 'ax.pass2': 'Confirmer le mot de passe', 'ax.create': 'Créer et entrer', 'ax.enter': 'Entrer',
+      'ax.short': 'Au moins 8 caractères.', 'ax.mismatch': 'Les deux mots de passe ne sont pas identiques.', 'ax.bad': 'Mot de passe incorrect ou accès expiré.',
+      'ax.owner': 'Administrateur principal', 'ax.logout': 'Se déconnecter',
+      'ax.demo': 'Prototype : la vérification se fait dans le navigateur. Au lancement, les accès seront contrôlés par le serveur.',
+      'tm.members': 'Collaborateurs', 'tm.none': 'Aucun collaborateur pour le moment.', 'tm.new': 'Nouvel accès collaborateur', 'tm.name': 'Nom du collaborateur',
+      'tm.namePh': 'ex. Koffi (support)', 'tm.gen': 'Mot de passe généré', 'tm.regen': 'Générer un autre', 'tm.duration': 'Durée de l’accès',
+      'tm.d1': '24 heures', 'tm.d7': '7 jours', 'tm.d30': '30 jours', 'tm.dinf': 'Sans expiration', 'tm.perms': 'Rubriques autorisées',
+      'tm.add': 'Créer l’accès', 'tm.created': 'Accès créé. Communiquez ce mot de passe à {n} : {p} (il ne sera plus affiché).',
+      'tm.until': 'Expire le {d}', 'tm.forever': 'Sans expiration', 'tm.expired': 'Expiré', 'tm.last': 'Dernière connexion : {d}', 'tm.never': 'Jamais connecté',
+      'tm.delete': 'Supprimer', 'tm.deleteQ': 'Supprimer l’accès de {n} ?', 'tm.ownerPass': 'Changer mon mot de passe principal', 'tm.saved': 'Mot de passe enregistré',
+      'tm.ownerOnly': 'Réservé à l’administrateur principal', 'tm.needName': 'Indiquez le nom du collaborateur.', 'tm.needPerm': 'Cochez au moins une rubrique.',
+      'ai.title': 'Alertes et recommandations', 'ai.sub': 'Analyse automatique des données de la période', 'ai.ok': 'Rien d’anormal sur la période.',
+      'ai.critical': 'Critique', 'ai.warn': 'À surveiller', 'ai.info': 'Opportunité',
+      'ai.lowPriceT': 'Prix jugés trop bas par les chauffeurs', 'ai.lowPrice': '{p} des refus sont pour « prix trop bas ». Piste : relever le prix au km de 5 à 10 % pour {v}, puis comparer le taux de refus sur 2 semaines.',
+      'ai.farT': 'Courses jugées trop loin', 'ai.far': '{p} des refus sont pour « trop loin ». Piste : proposer d’abord les demandes aux chauffeurs de la même commune, ou ajouter un forfait d’approche.',
+      'ai.declinerT': 'Chauffeurs qui refusent beaucoup', 'ai.decliner': '{n} : {r} de refus sur {k} demandes. Piste : appeler pour comprendre (zone, véhicule, prix) avant toute sanction.',
+      'ai.peakT': 'Attente plus longue aux heures de pointe', 'ai.peak': 'Entre {h} h et {h2} h, l’attribution prend {x} fois plus de temps que la moyenne. Piste : inciter des chauffeurs à être en ligne sur ce créneau.',
+      'ai.zoneT': 'Zone où les clients abandonnent', 'ai.zone': 'Au départ de {c}, {p} des demandes sont annulées avant l’attribution. Piste : recruter des chauffeurs basés à {c}.',
+      'ai.gapT': 'Grille tarifaire peut-être trop basse', 'ai.gap': 'Les prix acceptés dépassent la référence de {p} en moyenne. Piste : relever légèrement la grille pour que le prix proposé corresponde mieux au marché.',
+      'ai.cancelT': 'Taux d’annulation élevé', 'ai.cancel': '{p} des demandes sont annulées. Piste : rappeler les clients concernés et vérifier les délais d’attribution.',
+      'ai.recruitT': 'Priorité de recrutement', 'ai.recruit': '{v} représente {p} des demandes. Concentrez le recrutement des chauffeurs sur ce véhicule.',
+      'ai.llmT': 'Aller plus loin avec une IA', 'ai.llmS': 'Préparez un résumé chiffré de la période et collez-le dans Claude pour obtenir une analyse détaillée et des idées d’amélioration.',
+      'ai.prepare': 'Préparer le résumé pour l’IA', 'ai.copy': 'Copier le résumé', 'ai.copied': 'Résumé copié', 'ai.open': 'Ouvrir Claude ›',
+      'ai.llmNote': 'Au lancement, cette analyse pourra se faire automatiquement chaque matin via l’API de Claude, depuis le serveur.',
+      'lv.busy': 'En course', 'lv.free': 'En ligne, disponible', 'lv.req': 'Demande en attente', 'lv.offline': 'Hors ligne',
+      'lv.drivers': 'Chauffeurs', 'lv.refresh': 'Mise à jour toutes les 2 secondes',
+      'lv.note': 'Prototype : positions simulées autour des communes. Au lancement, l’app chauffeur enverra sa position GPS et la carte utilisera Google Maps.'
+    },
+    en: {
+      'ad.live': 'Live map', 'ad.team': 'Team & access',
+      'ax.setupT': 'Create the admin password', 'ax.setupS': 'This main password unlocks the whole console. Keep it to yourself.',
+      'ax.loginT': 'Takaata console', 'ax.loginS': 'Enter your admin password or the password you were given.',
+      'ax.pass': 'Password', 'ax.pass2': 'Confirm password', 'ax.create': 'Create and enter', 'ax.enter': 'Enter',
+      'ax.short': 'At least 8 characters.', 'ax.mismatch': 'The two passwords do not match.', 'ax.bad': 'Wrong password or expired access.',
+      'ax.owner': 'Main administrator', 'ax.logout': 'Sign out',
+      'ax.demo': 'Prototype: the check runs in the browser. At launch, access will be checked by the server.',
+      'tm.members': 'Team members', 'tm.none': 'No team members yet.', 'tm.new': 'New team member access', 'tm.name': 'Team member name',
+      'tm.namePh': 'e.g. Koffi (support)', 'tm.gen': 'Generated password', 'tm.regen': 'Generate another', 'tm.duration': 'Access duration',
+      'tm.d1': '24 hours', 'tm.d7': '7 days', 'tm.d30': '30 days', 'tm.dinf': 'No expiry', 'tm.perms': 'Allowed sections',
+      'tm.add': 'Create access', 'tm.created': 'Access created. Give this password to {n}: {p} (it will not be shown again).',
+      'tm.until': 'Expires {d}', 'tm.forever': 'No expiry', 'tm.expired': 'Expired', 'tm.last': 'Last sign-in: {d}', 'tm.never': 'Never signed in',
+      'tm.delete': 'Delete', 'tm.deleteQ': 'Delete {n}’s access?', 'tm.ownerPass': 'Change my main password', 'tm.saved': 'Password saved',
+      'tm.ownerOnly': 'Main administrator only', 'tm.needName': 'Enter the team member’s name.', 'tm.needPerm': 'Tick at least one section.',
+      'ai.title': 'Alerts and recommendations', 'ai.sub': 'Automatic analysis of the period’s data', 'ai.ok': 'Nothing unusual in this period.',
+      'ai.critical': 'Critical', 'ai.warn': 'Watch', 'ai.info': 'Opportunity',
+      'ai.lowPriceT': 'Drivers find prices too low', 'ai.lowPrice': '{p} of declines are “price too low”. Idea: raise the per-km rate by 5–10% for {v}, then compare the decline rate over 2 weeks.',
+      'ai.farT': 'Trips judged too far', 'ai.far': '{p} of declines are “too far”. Idea: offer requests first to drivers in the same district, or add an approach fee.',
+      'ai.declinerT': 'Drivers who decline a lot', 'ai.decliner': '{n}: {r} declines out of {k} requests. Idea: call them to understand (area, vehicle, price) before any sanction.',
+      'ai.peakT': 'Longer waits at peak hours', 'ai.peak': 'Between {h}:00 and {h2}:00, assignment takes {x} times longer than average. Idea: encourage drivers to be online at that time.',
+      'ai.zoneT': 'Area where customers give up', 'ai.zone': 'From {c}, {p} of requests are cancelled before assignment. Idea: recruit drivers based in {c}.',
+      'ai.gapT': 'Rates may be too low', 'ai.gap': 'Accepted prices exceed the reference by {p} on average. Idea: raise the rates slightly so the suggested price matches the market.',
+      'ai.cancelT': 'High cancellation rate', 'ai.cancel': '{p} of requests are cancelled. Idea: call the customers concerned and check assignment times.',
+      'ai.recruitT': 'Recruitment priority', 'ai.recruit': '{v} accounts for {p} of requests. Focus driver recruitment on this vehicle.',
+      'ai.llmT': 'Go further with AI', 'ai.llmS': 'Prepare a figure-based summary of the period and paste it into Claude for a detailed analysis and improvement ideas.',
+      'ai.prepare': 'Prepare the summary for AI', 'ai.copy': 'Copy summary', 'ai.copied': 'Summary copied', 'ai.open': 'Open Claude ›',
+      'ai.llmNote': 'At launch, this analysis can run automatically every morning through the Claude API, from the server.',
+      'lv.busy': 'On a trip', 'lv.free': 'Online, available', 'lv.req': 'Waiting request', 'lv.offline': 'Offline',
+      'lv.drivers': 'Drivers', 'lv.refresh': 'Updated every 2 seconds',
+      'lv.note': 'Prototype: simulated positions around districts. At launch, the driver app will send its GPS position and the map will use Google Maps.'
+    }
+  });
+
+  const ALL_MODS = ['dash', 'analytics', 'live', 'orders', 'drivers', 'clients', 'finance', 'support', 'pricing', 'team'];
+  const STAFF_DEFAULT = ['dash', 'analytics', 'live', 'orders', 'drivers', 'clients', 'support'];
+  const DURATIONS = [['tm.d1', 864e5], ['tm.d7', 7 * 864e5], ['tm.d30', 30 * 864e5], ['tm.dinf', 0]];
+  const genPass = () => { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const r = () => a[Math.floor(Math.random() * a.length)]; return `${r()}${r()}${r()}${r()}-${r()}${r()}${r()}${r()}`; };
+  const admHash = pass => hashPass('admin', pass);
+
+  // Session de la console (onglet courant).
+  function admSession() {
+    let sess = null;
+    try { sess = JSON.parse(sessionStorage.getItem('takaata.adm') || 'null'); } catch (e) { sess = view.admSess || null; }
+    if (!sess) sess = view.admSess || null;
+    if (sess && sess.role === 'staff') {
+      const m = store.adminState().staff.find(x => x.id === sess.id);
+      if (!m || (m.expiresAt && m.expiresAt < Date.now())) return null;
+      return { role: 'staff', id: m.id, name: m.name, perms: m.perms };
+    }
+    return sess && sess.role === 'owner' && store.adminState().ownerHash ? { role: 'owner', name: t('ax.owner'), perms: ALL_MODS } : null;
+  }
+  function setAdmSession(sess) {
+    view.admSess = sess;
+    try { if (sess) sessionStorage.setItem('takaata.adm', JSON.stringify(sess)); else sessionStorage.removeItem('takaata.adm'); } catch (e) { /* stockage indisponible */ }
+  }
+
+  function adminGate() {
+    const A = store.adminState();
+    const err = view.admErr ? `<p class="field-error" role="alert">${esc(view.admErr)}</p>` : '';
+    const setup = !A.ownerHash;
+    return `<section class="app-sec auth adm-gate">
+      <div class="auth-head"><span class="brand-mark auth-mark" aria-hidden="true"></span>
+        <h1 class="app-title">${esc(t(setup ? 'ax.setupT' : 'ax.loginT'))}</h1><p class="sub">${esc(t(setup ? 'ax.setupS' : 'ax.loginS'))}</p></div>
+      <form class="auth-form" id="admGateForm" novalidate>
+        <label class="field"><span>${esc(t('ax.pass'))}</span><input id="adm-pass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}"></label>
+        ${setup ? `<label class="field"><span>${esc(t('ax.pass2'))}</span><input id="adm-pass2" type="password" autocomplete="new-password"></label><p class="hint">${esc(t('ax.short'))}</p>` : ''}
+        ${err}
+        <button class="btn btn-signal btn-block" type="submit">${esc(t(setup ? 'ax.create' : 'ax.enter'))}</button>
+      </form>
+      <p class="hint">${esc(t('ax.demo'))}</p>
+    </section>`;
+  }
+
+  async function submitAdmGate() {
+    const A = store.adminState();
+    const p = document.getElementById('adm-pass').value;
+    view.admErr = '';
+    if (!A.ownerHash) {
+      if (p.length < 8) { view.admErr = t('ax.short'); return render(); }
+      if (p !== document.getElementById('adm-pass2').value) { view.admErr = t('ax.mismatch'); return render(); }
+      store.setOwnerHash(await admHash(p));
+      setAdmSession({ role: 'owner' });
+      return dgo();
+    }
+    const h = await admHash(p);
+    if (h === A.ownerHash) { setAdmSession({ role: 'owner' }); return dgo(); }
+    const m = A.staff.find(x => x.hash === h && (!x.expiresAt || x.expiresAt > Date.now()));
+    if (m) { setAdmSession({ role: 'staff', id: m.id }); store.touchStaff(m.id); return dgo(); }
+    view.admErr = t('ax.bad');
+    render();
+  }
+
+  function admTeam() {
+    const A = store.adminState();
+    const f = view.teamForm || (view.teamForm = { name: '', pass: genPass(), dur: 7 * 864e5, perms: STAFF_DEFAULT.slice() });
+    const longDt = ts => new Date(ts).toLocaleString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `
+      ${view.teamCreated ? `<p class="notice notice-ok" role="status">${esc(t('tm.created', view.teamCreated))}</p>` : ''}
+      <section class="adm-card"><h2 class="app-h">${esc(t('tm.members'))}</h2>
+        ${A.staff.length ? `<ul class="adm-list team-list">${A.staff.map(m => {
+          const expired = m.expiresAt && m.expiresAt < Date.now();
+          return `<li class="team-row">
+            <div class="team-main"><b>${esc(m.name)}</b>
+              <small>${esc(expired ? t('tm.expired') : m.expiresAt ? t('tm.until', { d: longDt(m.expiresAt) }) : t('tm.forever'))} · ${esc(m.lastLogin ? t('tm.last', { d: longDt(m.lastLogin) }) : t('tm.never'))}</small>
+              <div class="tag-row team-perms">${m.perms.map(k => `<span class="tag is-on">${esc(t('ad.' + k))}</span>`).join('')}</div></div>
+            ${view.teamDelete === m.id ? `<div class="confirm-inline"><p>${esc(t('tm.deleteQ', { n: m.name }))}</p><div class="btn-row">
+              <button class="btn btn-danger btn-sm" type="button" data-act="tm-del-yes" data-id="${m.id}">${esc(t('tm.delete'))}</button>
+              <button class="btn btn-ghost btn-sm" type="button" data-act="tm-del-no">${esc(t('a.resetNo'))}</button></div></div>`
+              : `<button class="btn btn-ghost btn-sm btn-decline" type="button" data-act="tm-del" data-id="${m.id}">${esc(t('tm.delete'))}</button>`}
+            ${expired ? `<span class="pill pill-cancelled">${esc(t('tm.expired'))}</span>` : ''}
+          </li>`;
+        }).join('')}</ul>` : `<p class="empty">${esc(t('tm.none'))}</p>`}
+      </section>
+      <form class="adm-card" id="teamForm" novalidate>
+        <h2 class="app-h">${esc(t('tm.new'))}</h2>
+        <div class="row-2">
+          <label class="field"><span>${esc(t('tm.name'))}</span><input id="tm-name" value="${esc(f.name)}" placeholder="${esc(t('tm.namePh'))}"></label>
+          <div class="field"><span>${esc(t('tm.gen'))}</span><div class="gen-pass"><b class="mono select-all">${esc(f.pass)}</b><button class="btn btn-ghost btn-sm" type="button" data-act="tm-regen">${esc(t('tm.regen'))}</button></div></div>
+        </div>
+        <fieldset class="chips"><legend>${esc(t('tm.duration'))}</legend>
+          ${DURATIONS.map(([k, ms]) => `<label class="chip-radio"><input type="radio" name="tm-dur" id="tm-dur-${ms}" value="${ms}"${f.dur === ms ? ' checked' : ''}><span>${esc(t(k))}</span></label>`).join('')}
+        </fieldset>
+        <fieldset class="chips"><legend>${esc(t('tm.perms'))}</legend>
+          ${ALL_MODS.filter(k => k !== 'team').map(k => `<label class="chip-radio"><input type="checkbox" id="tm-perm-${k}" data-perm="${k}"${f.perms.includes(k) ? ' checked' : ''}><span>${esc(t('ad.' + k))}</span></label>`).join('')}
+        </fieldset>
+        <p class="field-error" id="tm-err" hidden></p>
+        <button class="btn btn-signal" type="submit">${esc(t('tm.add'))}</button>
+      </form>
+      <form class="adm-card" id="ownerPassForm" novalidate>
+        <h2 class="app-h">${esc(t('tm.ownerPass'))}</h2>
+        <div class="row-2">
+          <label class="field"><span>${esc(t('ax.pass'))}</span><input id="op-pass" type="password" autocomplete="new-password"></label>
+          <label class="field"><span>${esc(t('ax.pass2'))}</span><input id="op-pass2" type="password" autocomplete="new-password"></label>
+        </div>
+        <p class="field-error" id="op-err" hidden></p>
+        <button class="btn btn-ghost" type="submit">${esc(t('au.save'))}</button>
+      </form>`;
+  }
+
+  // Alertes « intelligentes » : règles simples calculées sur les données de la période.
+  function insights(ev) {
+    const by = type => ev.filter(e => e.type === type);
+    const created = by('created'), assigned = by('assigned'), cancelled = by('cancelled'), declined = by('declined'), offers = by('offer');
+    const out = [];
+    const pct = (a, b) => b ? a / b : 0;
+    if (declined.length >= 10) {
+      const low = pct(declined.filter(e => e.reason === 'low').length, declined.length);
+      const far = pct(declined.filter(e => e.reason === 'far').length, declined.length);
+      if (low >= .3) {
+        const topV = countBy(declined.filter(e => e.reason === 'low'), 'vehicle')[0];
+        out.push(['warn', 'ai.lowPriceT', t('ai.lowPrice', { p: pctStr(low), v: t('veh.' + topV[0]) })]);
+      }
+      if (far >= .3) out.push(['warn', 'ai.farT', t('ai.far', { p: pctStr(far) })]);
+    }
+    const per = {};
+    declined.forEach(e => { (per[e.driver] = per[e.driver] || { d: 0, o: 0 }).d++; });
+    offers.forEach(e => { (per[e.driver] = per[e.driver] || { d: 0, o: 0 }).o++; });
+    const decliners = Object.entries(per).filter(([, x]) => x.d + x.o >= 10 && x.d / (x.d + x.o) > .5).sort((a, b) => b[1].d - a[1].d).slice(0, 3);
+    if (decliners.length) out.push(['critical', 'ai.declinerT', decliners.map(([k, x]) => t('ai.decliner', { n: driverLabel(k), r: pctStr(x.d / (x.d + x.o)), k: x.d + x.o })).join(' ')]);
+    if (assigned.length >= 20) {
+      const all = assigned.reduce((a, e) => a + e.delayMs, 0) / assigned.length;
+      const hrs = Array.from({ length: 24 }, (_, h) => assigned.filter(e => new Date(e.at).getHours() === h));
+      const worst = hrs.map((l, h) => [h, l.length >= 5 ? l.reduce((a, e) => a + e.delayMs, 0) / l.length : 0]).sort((a, b) => b[1] - a[1])[0];
+      if (worst[1] > all * 1.3) out.push(['warn', 'ai.peakT', t('ai.peak', { h: worst[0], h2: worst[0] + 1, x: (worst[1] / all).toFixed(1).replace('.', TK.getLang() === 'fr' ? ',' : '.') })]);
+    }
+    if (created.length >= 20) {
+      const zones = countBy(created, 'from').filter(([, n]) => n >= 8).map(([c, n]) => [c, cancelled.filter(e => e.from === c && e.stage === 'open').length / n]).sort((a, b) => b[1] - a[1]);
+      if (zones[0] && zones[0][1] >= .12) out.push(['warn', 'ai.zoneT', t('ai.zone', { c: commune(zones[0][0]).name, p: pctStr(zones[0][1]) })]);
+      const cr = cancelled.length / created.length;
+      if (cr >= .15) out.push(['critical', 'ai.cancelT', t('ai.cancel', { p: pctStr(cr) })]);
+      const topV = countBy(created, 'vehicle')[0];
+      if (topV && topV[1] / created.length >= .35) out.push(['info', 'ai.recruitT', t('ai.recruit', { v: t('veh.' + topV[0]), p: pctStr(topV[1] / created.length) })]);
+    }
+    const withRef = assigned.filter(e => e.reference);
+    const gap = withRef.length ? withRef.reduce((a, e) => a + e.price / e.reference - 1, 0) / withRef.length : 0;
+    if (withRef.length >= 20 && gap >= .05) out.push(['info', 'ai.gapT', t('ai.gap', { p: `${Math.round(gap * 100)} %` })]);
+    const rank = { critical: 0, warn: 1, info: 2 };
+    return out.sort((a, b) => rank[a[0]] - rank[b[0]]);
+  }
+
+  function insightsBlock(ev) {
+    const list = insights(ev);
+    const icon = { critical: '!', warn: '▲', info: '★' };
+    return `<section class="adm-card ai-card">
+      <div class="ai-head"><div><h2 class="app-h">${esc(t('ai.title'))}</h2><small class="hint">${esc(t('ai.sub'))}</small></div></div>
+      ${list.length ? `<ul class="ai-list">${list.map(([lvl, tk, txt]) => `<li class="ai-item ai-${lvl}">
+        <span class="ai-ic" aria-hidden="true">${icon[lvl]}</span>
+        <div><span class="ai-lvl">${esc(t('ai.' + lvl))}</span><b>${esc(t(tk))}</b><p>${esc(txt)}</p></div></li>`).join('')}</ul>`
+        : `<p class="empty">${esc(t('ai.ok'))}</p>`}
+      <div class="ai-llm">
+        <b>${esc(t('ai.llmT'))}</b><p class="hint">${esc(t('ai.llmS'))}</p>
+        ${view.aiSummary ? `<textarea id="ai-summary" class="ai-summary mono" rows="8" readonly>${esc(view.aiSummary)}</textarea>
+          <div class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="ai-copy">${esc(t('ai.copy'))}</button>
+          <a class="btn btn-ghost btn-sm" href="https://claude.ai/new" target="_blank" rel="noopener">${esc(t('ai.open'))}</a></div>`
+          : `<button class="btn btn-ghost btn-sm" type="button" data-act="ai-prepare">${esc(t('ai.prepare'))}</button>`}
+        <p class="hint">${esc(t('ai.llmNote'))}</p>
+      </div>
+    </section>`;
+  }
+
+  function aiSummary(ev, period) {
+    const by = type => ev.filter(e => e.type === type);
+    const created = by('created'), assigned = by('assigned'), cancelled = by('cancelled'), declined = by('declined');
+    const top = (rows, n = 5) => rows.slice(0, n).map(([k, v]) => `${k} (${v})`).join(', ');
+    return [
+      `Takaata — transport de marchandises à la demande à Abidjan. Données de la période : ${period ? period + ' derniers jours' : 'tout l’historique'}.`,
+      `Demandes : ${created.length} ; attribuées : ${assigned.length} ; annulées : ${cancelled.length} ; refus de chauffeurs : ${declined.length}.`,
+      `Délai moyen d’attribution : ${assigned.length ? (assigned.reduce((a, e) => a + e.delayMs, 0) / assigned.length / 60000).toFixed(1) : '—'} min.`,
+      `Communes de départ : ${top(countBy(created, e => commune(e.from).name))}.`,
+      `Trajets fréquents : ${top(countBy(created, e => commune(e.from).name + ' → ' + commune(e.to).name))}.`,
+      `Véhicules demandés : ${top(countBy(created, e => t('veh.' + e.vehicle)))}.`,
+      `Motifs de refus : ${top(countBy(declined, e => t('dd.' + (e.reason || 'other'))))}.`,
+      `Annulations par étape : ${top(countBy(cancelled, e => t('an.st.' + (e.stage || 'open'))))}.`,
+      `Alertes détectées : ${insights(ev).map(x => t(x[1])).join(' ; ') || 'aucune'}.`,
+      '',
+      'Question : quelles sont les 5 actions prioritaires pour augmenter le nombre de courses livrées et la satisfaction des clients et des chauffeurs ? Donne des chiffres cibles et un plan sur 30 jours.'
+    ].join('\n');
+  }
+
+  // Carte en direct : chauffeurs en course, disponibles, et demandes en attente.
+  const LB = { minLon: -4.29, maxLon: -3.86, minLat: 5.235, maxLat: 5.515 }, LW = 1000, LH = 620;
+  const lp = (lat, lon) => [30 + (lon - LB.minLon) / (LB.maxLon - LB.minLon) * (LW - 60), 30 + (LB.maxLat - lat) / (LB.maxLat - LB.minLat) * (LH - 60)];
+  const cp = id => { const c = commune(id); return lp(c.lat, c.lon); };
+  const PROG = { assigned: .02, pickup: .05, loading: .1, transit: .55, arrived: .98 };
+  function fleet() {
+    const now = Date.now(), s = store.state;
+    const list = [];
+    const active = s.orders.filter(o => o.driver && PROG[o.status] != null);
+    const along = o => { const [x1, y1] = cp(o.from), [x2, y2] = cp(o.to); const k = PROG[o.status]; return [x1 + (x2 - x1) * k, y1 + (y2 - y1) * k]; };
+    store.DRIVER_POOL.forEach((d, i) => {
+      const o = active.find(x => !x.driver.me && x.driver.name === d.name);
+      if (o) return list.push({ name: d.name, status: 'busy', pos: along(o), route: o });
+      const slot = Math.floor(now / 120000 + i * 0.37) % 5;           // tour à tour en ligne / hors ligne
+      if (slot === 4) return list.push({ name: d.name, status: 'offline' });
+      const home = TK.COMMUNES[(i * 3) % TK.COMMUNES.length];
+      const a = now / 40000 + i * 1.7, [hx, hy] = lp(home.lat, home.lon);
+      list.push({ name: d.name, status: 'free', pos: [hx + Math.cos(a) * 18, hy + Math.sin(a) * 12] });
+    });
+    Object.values(s.driverAccounts).filter(d => d.status === 'approved').forEach(d => {
+      const name = `${d.firstName} ${d.lastName}`;
+      const o = active.find(x => x.driver.me);
+      if (o && d.phone === s.driverSession) return list.push({ name, status: 'busy', pos: along(o), route: o, real: true });
+      if (!d.online) return list.push({ name, status: 'offline', real: true });
+      const [x, y] = cp(d.commune);
+      list.push({ name, status: 'free', pos: [x + 10, y - 8], real: true });
+    });
+    return list;
+  }
+
+  function admLive() {
+    const f = fleet();
+    const open = store.state.orders.filter(o => o.status === 'open');
+    const count = st => f.filter(x => x.status === st).length;
+    const dots = f.filter(x => x.pos);
+    return `
+      <div class="live-legend">
+        <span><i class="lg lg-busy" aria-hidden="true"></i>${esc(t('lv.busy'))} <b class="mono">${count('busy')}</b></span>
+        <span><i class="lg lg-free" aria-hidden="true"></i>${esc(t('lv.free'))} <b class="mono">${count('free')}</b></span>
+        <span><i class="lg lg-req" aria-hidden="true"></i>${esc(t('lv.req'))} <b class="mono">${open.length}</b></span>
+        <span class="hint">${esc(t('lv.offline'))} : <b class="mono">${count('offline')}</b> · ${esc(t('lv.refresh'))}</span>
+      </div>
+      <div class="adm-grid2 live-grid">
+        <section class="adm-card live-map-card">
+          <svg class="live-map" viewBox="0 0 ${LW} ${LH}" role="img" aria-label="${esc(t('ad.live'))} · Abidjan">
+            <rect class="lv-bg" x="0" y="0" width="${LW}" height="${LH}" rx="14"/>
+            <path class="lv-lagoon" d="M60 ${LH * .62} C 250 ${LH * .55}, 420 ${LH * .66}, 560 ${LH * .6} S 820 ${LH * .54}, 960 ${LH * .6}"/>
+            ${TK.COMMUNES.map(c => { const [x, y] = lp(c.lat, c.lon); return `<g class="lv-commune"><circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="30"/><text x="${x.toFixed(0)}" y="${(y + 48).toFixed(0)}" text-anchor="middle">${esc(c.name)}</text></g>`; }).join('')}
+            ${f.filter(x => x.route).map(x => { const [x1, y1] = cp(x.route.from), [x2, y2] = cp(x.route.to); return `<line class="lv-route" x1="${x1.toFixed(0)}" y1="${y1.toFixed(0)}" x2="${x2.toFixed(0)}" y2="${y2.toFixed(0)}"/>`; }).join('')}
+            ${open.map((o, i) => { const [x, y] = cp(o.from); return `<g class="lv-req" transform="translate(${(x - 14 + (i % 3) * 10).toFixed(0)},${(y - 20 - Math.floor(i / 3) * 10).toFixed(0)})"><circle class="lv-req-pulse" r="10"/><path d="M0 -12 C 7 -12 10 -6 10 -2 C 10 5 0 12 0 12 C 0 12 -10 5 -10 -2 C -10 -6 -7 -12 0 -12 Z"/><circle class="lv-req-dot" cy="-2" r="3.5"/><title>${esc(route(o))} · ${esc(t('veh.' + o.vehicle))}</title></g>`; }).join('')}
+            ${dots.map(x => `<g class="lv-driver lv-${x.status}${x.real ? ' is-real' : ''}" transform="translate(${x.pos[0].toFixed(1)},${x.pos[1].toFixed(1)})"><circle r="${x.real ? 11 : 9}"/><title>${esc(x.name)} · ${esc(t('lv.' + x.status))}</title></g>`).join('')}
+          </svg>
+          <p class="hint">${esc(t('lv.note'))}</p>
+        </section>
+        <section class="adm-card"><h2 class="app-h">${esc(t('lv.drivers'))}</h2>
+          <ul class="live-list">${f.sort((a, b) => ['busy', 'free', 'offline'].indexOf(a.status) - ['busy', 'free', 'offline'].indexOf(b.status)).map(x => `<li>
+            <i class="lg lg-${x.status === 'offline' ? 'off' : x.status}" aria-hidden="true"></i><b>${esc(x.name)}</b>
+            <small>${esc(t('lv.' + x.status))}${x.route ? ' · ' + route(x.route) : ''}</small></li>`).join('')}</ul>
+        </section>
+      </div>`;
+  }
+
+  // ---------- NOTIFICATIONS CHAUFFEUR : nouvelles demandes, solde bas ----------
+  TK.addStrings({
+    fr: {
+      'nt.newReq': 'Nouvelle demande', 'nt.reqBody': '{r} · {v} · gain net {n}', 'nt.accept': 'Accepter', 'nt.view': 'Voir', 'nt.close': 'Fermer',
+      'nt.sent': 'Offre envoyée au client', 'nt.enable': 'Activer les notifications', 'nt.enableS': 'Recevez les demandes même quand l’application est en arrière-plan.',
+      'nt.on': 'Notifications activées', 'nt.blocked': 'Notifications bloquées : autorisez-les dans les réglages du navigateur.', 'nt.unsupported': 'Notifications non disponibles sur cet écran.',
+      'nt.low1T': 'Solde bas', 'nt.low1': 'Il vous reste {p} disponibles. Pensez à recharger pour continuer à recevoir des courses.',
+      'nt.low2T': 'Solde presque épuisé', 'nt.low2': 'Il ne vous reste que {p}. Rechargez maintenant pour pouvoir accepter de nouvelles courses.',
+      'nt.recharge': 'Recharger', 'nt.title': 'Notifications',
+      'nt.note': 'Prototype : les notifications marchent quand l’application est ouverte ou en arrière-plan. Pour les recevoir application fermée, il faudra le serveur (notifications push).'
+    },
+    en: {
+      'nt.newReq': 'New request', 'nt.reqBody': '{r} · {v} · net earnings {n}', 'nt.accept': 'Accept', 'nt.view': 'View', 'nt.close': 'Close',
+      'nt.sent': 'Offer sent to the customer', 'nt.enable': 'Turn on notifications', 'nt.enableS': 'Get requests even when the app is in the background.',
+      'nt.on': 'Notifications on', 'nt.blocked': 'Notifications blocked: allow them in your browser settings.', 'nt.unsupported': 'Notifications are not available on this screen.',
+      'nt.low1T': 'Low balance', 'nt.low1': 'You have {p} available. Top up to keep receiving trips.',
+      'nt.low2T': 'Balance almost empty', 'nt.low2': 'Only {p} left. Top up now to accept new trips.',
+      'nt.recharge': 'Top up', 'nt.title': 'Notifications',
+      'nt.note': 'Prototype: notifications work while the app is open or in the background. Receiving them with the app closed will need the server (push notifications).'
+    }
+  });
+
+  const BALANCE_ALERTS = [10000, 5000];   // alerte à moins de 10 000 FCFA disponibles, puis à moins de 5 000
+  const notifState = () => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+
+  function beep() {
+    try {
+      const ctx = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      [880, 1320].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = f; g.gain.setValueAtTime(.0001, ctx.currentTime + i * .18);
+        g.gain.exponentialRampToValueAtTime(.2, ctx.currentTime + i * .18 + .02); g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + i * .18 + .16);
+        o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + i * .18); o.stop(ctx.currentTime + i * .18 + .17);
+      });
+    } catch (e) { /* son indisponible */ }
+  }
+
+  // Notification système (si autorisée et l'app pas au premier plan), sinon bandeau dans l'app.
+  function notifyDriver(kind, title, body, data) {
+    const outside = document.hidden || currentRole() !== 'driver';
+    if (outside && notifState() === 'granted') {
+      const opts = { body, tag: kind + (data.orderId || ''), data, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
+        actions: kind === 'request' ? [{ action: 'accept', title: t('nt.accept') }, { action: 'open', title: t('nt.view') }] : [{ action: 'open', title: t('nt.recharge') }] };
+      const fallback = () => { try { new Notification(title, opts); } catch (e) { /* ignore */ } };
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r => r.showNotification(title, opts)).catch(fallback);
+      else fallback();
+    }
+    view.dnotif = Object.assign({ kind, title, body, at: Date.now() }, data);
+    clearTimeout(view.dnotifTimer);
+    view.dnotifTimer = setTimeout(() => { view.dnotif = null; render(); }, 25000);
+    if (currentRole() === 'driver') beep();
+    render();
+  }
+
+  function notifBanner() {
+    const n = view.dnotif;
+    if (!n) return '';
+    const o = n.orderId && store.getOrder(n.orderId);
+    if (n.kind === 'request' && (!o || o.status !== 'open')) { view.dnotif = null; return ''; }
+    return `<div class="notif notif-${n.kind}${n.level === 2 ? ' is-ko' : ''}" role="alert">
+      <span class="notif-ic" aria-hidden="true">${n.kind === 'request' ? '●' : '!'}</span>
+      <div class="notif-txt"><b>${esc(n.title)}</b><span>${esc(n.body)}</span></div>
+      <div class="notif-acts">
+        ${n.kind === 'request' ? `<button class="btn btn-signal btn-sm" type="button" data-act="nt-accept" data-id="${n.orderId}">${esc(t('nt.accept'))}</button>
+          <button class="btn btn-light btn-sm" type="button" data-act="nt-view">${esc(t('nt.view'))}</button>`
+          : `<button class="btn btn-signal btn-sm" type="button" data-act="nt-recharge">${esc(t('nt.recharge'))}</button>`}
+        <button class="notif-x" type="button" data-act="nt-close" aria-label="${esc(t('nt.close'))}">✕</button>
+      </div></div>`;
+  }
+
+  function notifSettings() {
+    const st = notifState();
+    return `<div class="notif-set"><b>${esc(t('nt.title'))}</b>
+      ${st === 'granted' ? `<span class="pill pill-delivered">${esc(t('nt.on'))}</span>`
+        : st === 'denied' ? `<p class="hint">${esc(t('nt.blocked'))}</p>`
+        : st === 'unsupported' ? `<p class="hint">${esc(t('nt.unsupported'))}</p>`
+        : `<p class="hint">${esc(t('nt.enableS'))}</p><button class="btn btn-signal btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button>`}
+      <p class="hint">${esc(t('nt.note'))}</p></div>`;
+  }
+
+  function requestNotif(o) {
+    notifyDriver('request', t('nt.newReq'), t('nt.reqBody', { r: `${commune(o.from).name} → ${commune(o.to).name}`, v: t('veh.' + o.vehicle), n: fcfa(net(o)) }), { orderId: o.id });
+  }
+
+  function balanceCheck(d) {
+    if (d.status !== 'approved') return;
+    const avail = store.available();
+    const lvl = avail < BALANCE_ALERTS[1] ? 2 : avail < BALANCE_ALERTS[0] ? 1 : 0;
+    const prev = d.balAlert || 0;
+    if (lvl === prev) return;
+    store.setDriver({ balAlert: lvl });
+    if (lvl > prev) notifyDriver('balance', t(lvl === 2 ? 'nt.low2T' : 'nt.low1T'), t(lvl === 2 ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }), { level: lvl });
   }
 
   // ---------- APPELS MASQUÉS ----------
@@ -2033,7 +2453,7 @@
 
     const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
     const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
-    const call = view.call && role !== 'admin' ? callOverlay() : '';
+    const call = (view.call && role !== 'admin' ? callOverlay() : '') + (role === 'driver' && store.driver() ? notifBanner() : '');
     const html = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
     // Ne remplace l'écran que s'il a changé : évite de perdre un appui pendant un rafraîchissement.
     if (html === lastHtml && root.innerHTML) return;
@@ -2091,7 +2511,18 @@
       case 'orders': go('orders'); break;
       case 'adm-mod': Object.assign(view.adm, { mod: b.dataset.mod, order: null, driver: null, client: null }); dgo(); break;
       case 'adm-filter': view.adm.filter = b.dataset.f; render(); break;
-      case 'an-period': view.adm.period = +b.dataset.n; render(); break;
+      case 'an-period': view.adm.period = +b.dataset.n; view.aiSummary = ''; render(); break;
+      case 'ai-prepare': { const since = view.adm.period ? Date.now() - view.adm.period * 864e5 : 0; view.aiSummary = aiSummary(store.state.events.filter(e => e.at >= since), view.adm.period); render(); break; }
+      case 'ai-copy': {
+        const ta = document.getElementById('ai-summary');
+        try { navigator.clipboard.writeText(view.aiSummary).then(() => ui.toast(t('ai.copied')), () => { ta.select(); }); } catch (err) { ta.select(); }
+        break;
+      }
+      case 'adm-logout': setAdmSession(null); view.adm.mod = 'dash'; dgo(); break;
+      case 'tm-regen': view.teamForm.pass = genPass(); view.teamForm.name = (document.getElementById('tm-name') || {}).value || view.teamForm.name; render(); break;
+      case 'tm-del': view.teamDelete = id; render(); break;
+      case 'tm-del-no': view.teamDelete = null; render(); break;
+      case 'tm-del-yes': view.teamDelete = null; view.teamCreated = null; store.removeStaff(id); break;
       case 'an-seed': store.seedAnalytics(); break;
       case 'an-clear': store.clearDemoAnalytics(); break;
       case 'an-export': exportEvents(); break;
@@ -2111,6 +2542,21 @@
       case 'dtab': view.dtab = b.dataset.tab; view.dmeSub = ''; view.confirmLogout = false; view.supportSent = false; dgo(); break;
       case 'dme-sub': view.dmeSub = b.dataset.sub; view.confirmLogout = false; view.supportSent = false; dgo(); break;
       case 'd-online': store.setOnline(!store.driver().online); break;
+      case 'nt-close': view.dnotif = null; render(); break;
+      case 'nt-view': view.dnotif = null; view.dtab = 'jobs'; dgo(); break;
+      case 'nt-recharge': view.dnotif = null; view.dtab = 'gains'; dgo(); break;
+      case 'nt-accept': {
+        const o = store.getOrder(id);
+        view.dnotif = null;
+        const res = o ? store.driverOffer(id, o.price) : { ok: false };
+        view.dtab = 'jobs';
+        if (res.ok) ui.toast(t('nt.sent')); else if (res.missing) ui.toast(t('d.need', { m: fcfa(res.missing) }));
+        dgo();
+        break;
+      }
+      case 'nt-enable':
+        try { Notification.requestPermission().then(() => render()); } catch (err) { /* non disponible */ }
+        break;
       case 'd-goal-edit': view.goalEdit = !view.goalEdit; render(); break;
       case 'd-goal': view.goalEdit = false; store.setDriver({ goal: +b.dataset.n }); break;
       case 'd-decline-open': view.declineFor = view.declineFor === id ? null : id; render(); break;
@@ -2307,6 +2753,29 @@
     e.preventDefault();
     const f = e.target;
     if (f.id === 'authForm') { submitAuth(); return; }
+    if (f.id === 'admGateForm') { submitAdmGate(); return; }
+    if (f.id === 'teamForm') {
+      const tf = view.teamForm, err = document.getElementById('tm-err');
+      tf.name = document.getElementById('tm-name').value.trim();
+      tf.dur = +(f.querySelector('input[name=tm-dur]:checked') || {}).value || 0;
+      tf.perms = Array.from(f.querySelectorAll('input[data-perm]:checked')).map(x => x.dataset.perm);
+      if (!tf.name) { err.textContent = t('tm.needName'); err.hidden = false; return; }
+      if (!tf.perms.length) { err.textContent = t('tm.needPerm'); err.hidden = false; return; }
+      store.addStaff({ name: tf.name, hash: await admHash(tf.pass), perms: tf.perms, expiresAt: tf.dur ? Date.now() + tf.dur : null });
+      view.teamCreated = { n: tf.name, p: tf.pass };
+      view.teamForm = null;
+      render();
+      return;
+    }
+    if (f.id === 'ownerPassForm') {
+      const p1 = document.getElementById('op-pass').value, p2 = document.getElementById('op-pass2').value, err = document.getElementById('op-err');
+      if (p1.length < 8) { err.textContent = t('ax.short'); err.hidden = false; return; }
+      if (p1 !== p2) { err.textContent = t('ax.mismatch'); err.hidden = false; return; }
+      store.setOwnerHash(await admHash(p1));
+      ui.toast(t('tm.saved'));
+      render();
+      return;
+    }
     if (f.id === 'pricingForm') {
       const num = id => Math.max(0, Math.round(+document.getElementById(id).value || 0));
       store.setPricing({
@@ -2430,6 +2899,7 @@
         view.celebrateTimer = setTimeout(() => { view.celebrate = null; render(); }, 6000);
       }
       lastTrips = d.trips;
+      balanceCheck(d);
     } else lastTrips = null;
     if (currentRole() && view.name !== 'wizard') render();
   });
@@ -2445,9 +2915,11 @@
       if (ev.type === 'accepted' && currentRole() === 'driver') ui.toast(t('toast.accepted'));
       if (ev.type === 'declined' && currentRole() === 'driver') ui.toast(t('d.declined'));
       if (ev.type === 'approved' && currentRole() === 'driver') ui.toast(t('da.approved'));
+      if (ev.type === 'request') requestNotif(ev.order);
     });
-    // Comptes à rebours : clôture automatique, renvoi du code SMS.
+    // Comptes à rebours : clôture automatique, renvoi du code SMS ; carte en direct.
     const role = currentRole();
+    if (role === 'admin' && view.adm.mod === 'live' && admSession() && Date.now() % 2000 < 1000) render();
     const o = view.name === 'order' && store.getOrder(view.orderId);
     if (role === 'client' && !store.user() && view.auth.step === 'otp') render();
     else if (role === 'driver' && !store.driver() && view.dauth.step === 'otp') render();
@@ -2469,6 +2941,17 @@
   render();
 
   // Service worker : hors ligne et installation (ignoré là où il n'est pas autorisé).
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', e => {
+      const m = e.data || {};
+      if (m.type !== 'tk-notif') return;
+      if (location.hash !== '#chauffeur') location.hash = 'chauffeur';
+      view.dtab = m.action === 'open' && !m.orderId ? 'gains' : 'jobs';
+      const o = m.orderId && store.getOrder(m.orderId);
+      if (m.action === 'accept' && o) { const res = store.driverOffer(o.id, o.price); if (res.ok) ui.toast(t('nt.sent')); }
+      dgo();
+    });
+  }
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     try { navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) { /* ignore */ }
   }
