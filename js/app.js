@@ -1305,7 +1305,7 @@
       'dh.start': 'Prêt pour votre première course de la journée ?', 'dh.left': 'Plus que {n} pour atteindre votre objectif.',
       'dh.goalDone': 'Objectif du jour atteint. Bravo !', 'dh.onlineTime': 'En ligne', 'dh.goal': 'Objectif',
       'dh.go': 'Passer en ligne', 'dh.goS': 'Recevez les demandes près de vous', 'dh.searching': 'Recherche de courses pour votre {v}…',
-      'dh.zones': 'Zones demandées en ce moment', 'dh.req1': '1 demande', 'dh.reqN': '{n} demandes', 'dh.badges': 'Mes réussites',
+      'dh.zones': 'Zones demandées', 'dh.req1': '1 demande', 'dh.reqN': '{n} demandes', 'dh.badges': 'Mes réussites',
       'dh.done': 'Course terminée !',
       'bd.first': '1re course', 'bd.firstD': 'Terminer une première course', 'bd.ten': '10 courses', 'bd.tenD': 'Terminer 10 courses',
       'bd.fifty': '50 courses', 'bd.fiftyD': 'Terminer 50 courses', 'bd.star': 'Étoile', 'bd.starD': 'Note de 4,8 ou plus sur 5 notes',
@@ -1318,7 +1318,7 @@
       'dh.start': 'Ready for your first trip of the day?', 'dh.left': 'Only {n} left to reach your goal.',
       'dh.goalDone': 'Daily goal reached. Well done!', 'dh.onlineTime': 'Online', 'dh.goal': 'Goal',
       'dh.go': 'Go online', 'dh.goS': 'Receive requests near you', 'dh.searching': 'Looking for trips for your {v}…',
-      'dh.zones': 'Busy areas right now', 'dh.req1': '1 request', 'dh.reqN': '{n} requests', 'dh.badges': 'My achievements',
+      'dh.zones': 'Busy areas', 'dh.req1': '1 request', 'dh.reqN': '{n} requests', 'dh.badges': 'My achievements',
       'dh.done': 'Trip completed!',
       'bd.first': '1st trip', 'bd.firstD': 'Complete a first trip', 'bd.ten': '10 trips', 'bd.tenD': 'Complete 10 trips',
       'bd.fifty': '50 trips', 'bd.fiftyD': 'Complete 50 trips', 'bd.star': 'Star', 'bd.starD': 'Rating of 4.8 or more over 5 ratings',
@@ -1342,7 +1342,7 @@
     const mins = Math.round(store.onlineMsSince(d, today0()) / 60000);
     const h = new Date().getHours();
     const R = 54, C = 2 * Math.PI * R;
-    const zones = Object.entries(open.reduce((m, o) => (m[o.from] = (m[o.from] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const zones = Object.entries(open.reduce((m, o) => (m[o.from] = (m[o.from] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const rating = store.driverRating(d);
     const left = Math.max(0, goal - todayNet);
     return `
@@ -1372,14 +1372,8 @@
         </button>
         ${d.online ? `<button type="button" class="link-btn dhero-off" data-act="d-online">${esc(t('dj.goOffline'))}</button>` : ''}
       </section>
-      ${zones.length ? `<section class="app-sec">
-        <h2 class="app-h">${esc(t('dh.zones'))}</h2>
-        <div class="zone-row">${zones.map(([c, n]) => `<span class="zone"><span class="zone-heat" style="--h:${Math.min(1, n / zones[0][1])}" aria-hidden="true"></span><b>${esc(commune(c).name)}</b><small>${esc(t(n > 1 ? 'dh.reqN' : 'dh.req1', { n }))}</small></span>`).join('')}</div>
-      </section>` : ''}
-      <section class="app-sec">
-        <h2 class="app-h">${esc(t('dh.badges'))}</h2>
-        <div class="badge-row">${BADGES.map(([k, ok]) => `<span class="badge${ok(d) ? ' is-on' : ''}" title="${esc(t('bd.' + k + 'D'))}"><i aria-hidden="true">${ok(d) ? '★' : '☆'}</i><b>${esc(t('bd.' + k))}</b><small>${esc(t('bd.' + k + 'D'))}</small></span>`).join('')}</div>
-      </section>`;
+      ${zones.length ? `<div class="zone-mini"><small>${esc(t('dh.zones'))}</small>
+        ${zones.map(([c, n]) => `<span class="zone-chip"><span class="zone-heat" style="--h:${Math.min(1, n / zones[0][1])}" aria-hidden="true"></span>${esc(commune(c).name)} <b class="mono">${n}</b></span>`).join('')}</div>` : ''}`;
   }
 
   function driverJobs(d) {
@@ -1402,7 +1396,6 @@
     if (mineActive.length) return courseNav(mineActive[0]);
     return `
       ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
-      ${driverTrips(d)}
       ${avail < BALANCE_ALERTS[0] ? `<p class="wallet-alert${avail < BALANCE_ALERTS[1] ? ' is-ko' : ''}">${esc(t(avail < BALANCE_ALERTS[1] ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
       ${d.online && notifState() === 'default' ? `<div class="notif-hint"><span>${esc(t('nt.enableS'))}</span><button class="btn btn-light btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button></div>` : ''}
       ${view.celebrate ? `<div class="celebrate" role="status"><span class="celebrate-burst" aria-hidden="true"></span>
@@ -1414,7 +1407,8 @@
       ${d.online ? `<section class="app-sec">
         <h2 class="app-h">${esc(t('d.requests'))}</h2>
         ${requests.length ? `<div class="stack">${requests.map(requestCard).join('')}</div>` : `<p class="empty">${esc(t('d.noRequests'))}</p>`}
-      </section>` : ''}`;
+      </section>` : ''}
+      ${driverTrips(d)}`;
   }
 
   function driverGains(d) {
@@ -1520,6 +1514,8 @@
           <div><b class="mono">${d.trips}</b><small>${esc(t('dg.trips'))}</small></div>
           <div><b class="mono">${esc(t('da.age', { n: ageOf(d.birth) }))}</b><small>${esc(commune(d.commune).name)}</small></div>
         </div>
+        <h2 class="app-h">${esc(t('dh.badges'))}</h2>
+        <div class="badge-row">${BADGES.map(([k, ok]) => `<span class="badge${ok(d) ? ' is-on' : ''}" title="${esc(t('bd.' + k + 'D'))}"><i aria-hidden="true">${ok(d) ? '★' : '☆'}</i><b>${esc(t('bd.' + k))}</b><small>${esc(t('bd.' + k + 'D'))}</small></span>`).join('')}</div>
         <ul class="me-menu">
           ${item('docs', t('dm.docs'), MENU_ICONS.invoices, docsWarn ? `<span class="me-badge">!</span>` : '')}
           ${item('vehicle', t('dm.vehicle'), 'M3 13h11V6H3zM14 9h4l3 4v3h-7zM6.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z')}
@@ -3025,7 +3021,7 @@
       'rf.title': 'Nouvelle demande',
       'vc.client': 'Note vocale du client', 'vc.recS': 'Parlez au lieu d’écrire : « 2 cartons, 3 chaises… » · {n} s max',
       'ph.n': 'Photo {n}', 'ph.list': 'Liste d’objets', 'ph.tab': 'Photos', 'ph.add': 'Ajouter des photos', 'ph.addS': 'Appareil photo ou galerie · {n} au maximum',
-      'ph.why': 'Le chauffeur voit vos objets avant d’accepter. Prochaine étape : reconnaissance automatique des objets pour suggérer le véhicule et le prix.',
+      'ph.why': 'Le chauffeur voit vos objets avant d’accepter. Prochaine étape : reconnaissance automatique des meubles et objets sur les photos, pour estimer le poids.',
       'nv.toPickup': 'Allez au chargement', 'nv.toDrop': 'Livrez à', 'nv.gmaps': 'Itinéraire ↗', 'nv.details': 'Détails de la course',
       'nv.startNote': 'Prenez des photos du chargement : elles sont obligatoires pour démarrer, avec un scan du visage.', 'nv.needPhotos': 'Prenez d’abord au moins une photo du chargement.',
       'd.proofHint2': 'Photos = preuve en cas de litige.', 'd.next.loading': 'Démarrer la course', 'd.next.transit': 'Je suis arrivé',
@@ -3053,7 +3049,7 @@
       'rf.title': 'New request',
       'vc.client': 'Customer’s voice note', 'vc.recS': 'Speak instead of typing: “2 boxes, 3 chairs…” · {n} s max',
       'ph.n': 'Photo {n}', 'ph.list': 'Item list', 'ph.tab': 'Photos', 'ph.add': 'Add photos', 'ph.addS': 'Camera or gallery · up to {n}',
-      'ph.why': 'The driver sees your items before accepting. Next step: automatic item recognition to suggest the vehicle and the price.',
+      'ph.why': 'The driver sees your items before accepting. Next step: automatic recognition of furniture and items in the photos, to estimate the weight.',
       'nv.toPickup': 'Go to pickup', 'nv.toDrop': 'Deliver to', 'nv.gmaps': 'Directions ↗', 'nv.details': 'Trip details',
       'nv.startNote': 'Take photos of the load: they are required to start, with a face scan.', 'nv.needPhotos': 'First take at least one photo of the load.',
       'd.proofHint2': 'Photos = proof in case of dispute.', 'd.next.loading': 'Start the trip', 'd.next.transit': 'I have arrived',
@@ -3213,7 +3209,7 @@
         break;
       }
       case 'rf-open': openRequest(id); render(); break;
-      case 'rf-close': view.reqFull = null; render(); break;
+      case 'rf-close': if (view.dnotif && view.dnotif.orderId === view.reqFull) view.dnotif = null; view.reqFull = null; render(); break;
       case 'img-view': { const o = store.getOrder(id); if (o) imgView(o, b.dataset.k, +b.dataset.i); break; }
       case 'd-cam': {
         const which = b.dataset.which;
