@@ -196,9 +196,12 @@
   function ledger(type, amount, extra) { drv().ledger.unshift(Object.assign({ at: Date.now(), type, amount }, extra)); }
 
   function recharge(amount, channel) {
+    amount = Math.round(amount);
+    if (!(amount >= RECHARGE_MIN)) return false;
     drv().balance += amount;
     ledger('recharge', amount, { channel });
     emit();
+    return true;
   }
 
   function hold(orderId, amount) {
@@ -313,11 +316,13 @@
   }
 
   // Le chauffeur saisit le code du client. 5 essais, puis le support prend le relais.
-  const CODE_TRIES = 5;
+  const CODE_TRIES = 5, END_PHOTOS_MIN = 2, RECHARGE_MIN = 5000;
   function submitDeliveryCode(orderId, codeIn) {
     const o = getOrder(orderId);
     if (!o || o.status !== 'arrived') return { ok: false };
     if (o.codeTries >= CODE_TRIES) return { ok: false, locked: true };
+    // Le chauffeur photographie la marchandise livrée (2 photos minimum) avant de saisir le code.
+    if (o.driver && o.driver.me && (o.photos.end || 0) < END_PHOTOS_MIN) return { ok: false, photos: true };
     if (String(codeIn).trim() !== o.deliveryCode) {
       o.codeTries = (o.codeTries || 0) + 1;
       track('code_failed', o, { tries: o.codeTries });
@@ -697,6 +702,18 @@
     emit();
   }
 
+  // Urgence pendant une course (chauffeur ou client) : alerte prioritaire au support, avec la position si disponible.
+  function orderSos(orderId, by, pos) {
+    const o = getOrder(orderId);
+    if (!o) return;
+    const where = pos ? ` · position https://maps.google.com/?q=${pos.lat},${pos.lon}` : '';
+    const dv = o.driver ? ` · ${o.driver.name} (${o.driver.plate})` : '';
+    state.reports.unshift({ at: Date.now(), orderId: o.id, text: `URGENCE ${by === 'driver' ? 'chauffeur' : 'client'} · ${TK.commune(o.from).name} → ${TK.commune(o.to).name}${dv}${where}`,
+      phone: by === 'driver' ? (drv() && drv().phone) : o.clientPhone, urgent: true });
+    track('sos', o, { by });
+    emit();
+  }
+
   function setSetting(key, value) { state.settings = Object.assign({ whatsapp: '' }, state.settings, { [key]: value }); emit(); }
 
   function cancelBooking(tripId, bookingId) {
@@ -810,7 +827,7 @@
       get state() { return state; },
       subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
-      advance, confirmDelivery, repropose, submitDeliveryCode, faceCheck, CODE_TRIES, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
+      advance, confirmDelivery, repropose, submitDeliveryCode, faceCheck, orderSos, CODE_TRIES, END_PHOTOS_MIN, RECHARGE_MIN, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
       driverDecline, setOnline, onlineMsSince, seedAnalytics, clearDemoAnalytics,
       setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,

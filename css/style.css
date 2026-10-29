@@ -1346,3 +1346,15 @@ body.media-open { overflow: hidden; }
 .zone-chip b { color: var(--signal); }
 .earn-row > .earn-only { grid-column: 1 / -1; }
 .counter-form .label { flex-basis: 100%; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+/* Recharge libre, sécurité pendant la course, photos à l'arrivée */
+.rc-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.rc-form .price-input input { width: 170px; font-size: 16px; min-height: 38px; padding-right: 50px; }
+.rc-form .price-input input::placeholder { font-family: var(--font-body); font-size: 15px; }
+.rc-form small { flex-basis: 100%; color: var(--band-muted, var(--muted)); font-size: 12px; }
+.safety-bar { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.sos-box { display: grid; gap: 8px; border-color: var(--danger); }
+.sos-calls { display: flex; flex-wrap: wrap; gap: 6px; }
+.nav-map.is-locked { min-height: 22vh; text-align: center; padding: 20px; color: var(--muted); font-weight: 600; }
+.hint.is-todo { color: var(--danger); font-weight: 600; }
+.code-form.is-off { border-color: var(--line-strong); background: var(--surface-2, var(--bg)); }

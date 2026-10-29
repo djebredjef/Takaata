@@ -452,6 +452,7 @@
           <div class="plate mono" aria-label="Immatriculation">${esc(dv.plate)}</div>
         </article>
         ${callBlock(o, 'client')}
+        ${['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) ? safetyBar(o, 'client') : ''}
         ${['assigned', 'pickup'].includes(o.status) && o.clientPhone ? `<div class="code-box"><span>${esc(t('cv.clientCodeT'))}</span><b class="mono">${esc(o.clientPhone.slice(-4))}</b><small>${esc(t('cv.clientCodeS'))}</small></div>` : ''}
         ${o.deliveryCode && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) ? `<div class="code-box code-box-dl"><span>${esc(t('dc.title'))}</span><b class="mono">${esc(o.deliveryCode)}</b><small>${esc(t(o.status === 'arrived' ? 'dc.nowS' : 'dc.s'))}</small></div>` : ''}
 
@@ -1296,8 +1297,13 @@
           <label class="field field-inline"><span class="sr-only">Mobile Money</span>
             <select id="rcChannel">${PAYMENTS.slice(1).map(p => `<option value="${p}"${p === d.payOp ? ' selected' : ''}>${esc(t('pay.' + p))}</option>`).join('')}</select>
           </label>
-          ${[2000, 5000, 10000].map(n => `<button class="btn btn-light btn-sm" type="button" data-act="recharge" data-n="${n}">+${fmt(n)}</button>`).join('')}
+          ${[5000, 10000, 20000].map(n => `<button class="btn btn-light btn-sm" type="button" data-act="recharge" data-n="${n}">+${fmt(n)}</button>`).join('')}
         </div>
+        <form class="rc-form" id="rcForm" novalidate>
+          <label class="price-input"><span class="sr-only">${esc(t('rc.other'))}</span><input id="rc-amount" type="number" inputmode="numeric" min="${store.RECHARGE_MIN}" step="500" placeholder="${esc(t('rc.ph'))}"><span>FCFA</span></label>
+          <button class="btn btn-light btn-sm" type="submit">${esc(t('rc.go'))}</button>
+          <small>${esc(t('rc.min', { p: fcfa(store.RECHARGE_MIN) }))}</small>
+        </form>
         ${avail < 2000 ? `<p class="wallet-alert">${esc(t('d.low'))}</p>` : ''}
       </div>`;
   }
@@ -1603,9 +1609,9 @@
       ${ph.length ? `<div class="thumbs">${ph.map((src, i) => `<button type="button" class="thumb" data-act="img-view" data-id="${o.id}" data-k="items" data-i="${i}" aria-label="${esc(t('ph.n', { n: i + 1 }))}"><img src="${src}" alt=""></button>`).join('')}</div>` : ''}
     </div>`;
   }
-  function proofThumbs(o) {
+  function proofThumbs(o, only) {
     const p = o.proofs || {};
-    const all = (p.start || []).map((src, i) => ['start', i, src]).concat((p.end || []).map((src, i) => ['end', i, src]));
+    const all = (only === 'end' ? [] : (p.start || []).map((src, i) => ['start', i, src])).concat((p.end || []).map((src, i) => ['end', i, src]));
     if (!all.length) return '';
     return `<div class="thumbs">${all.map(([k, i, src]) => `<button type="button" class="thumb" data-act="img-view" data-id="${o.id}" data-k="${k}" data-i="${i}" aria-label="${esc(t(k === 'start' ? 't.photosStart' : 't.photosEnd'))} ${i + 1}"><img src="${src}" alt=""></button>`).join('')}</div>`;
   }
@@ -1627,27 +1633,32 @@
     const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lon}&travelmode=driving`;
     const nextKey = store.NEXT[o.status] ? 'd.next.' + o.status : null;
     const faces = (o.faceChecks || []).length;
+    // Course acceptée : l'itinéraire s'affiche après le scan du visage de « Je pars maintenant ».
+    const locked = o.status === 'assigned';
     return `<section class="course-nav">
       <div class="nav-card">
-        <div><small>${esc(t(toPickup ? 'nv.toPickup' : 'nv.toDrop'))}</small><b>${esc(dest.name)}${detail ? ` · ${esc(detail)}` : ''}</b></div>
-        <a class="btn btn-light btn-sm" href="${gmaps}" target="_blank" rel="noopener">${esc(t('nv.gmaps'))}</a>
+        ${locked ? `<div><small>${esc(t('nv.accepted'))}</small><b>${esc(t('nv.lockedT'))}</b></div>`
+          : `<div><small>${esc(t(toPickup ? 'nv.toPickup' : 'nv.toDrop'))}</small><b>${esc(dest.name)}${detail ? ` · ${esc(detail)}` : ''}</b></div>
+        <a class="btn btn-light btn-sm" href="${gmaps}" target="_blank" rel="noopener">${esc(t('nv.gmaps'))}</a>`}
       </div>
-      <div class="nav-map">${ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
+      <div class="nav-map${locked ? ' is-locked' : ''}">${locked ? `<p>◉ ${esc(t('nv.lockedS'))}</p>` : ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
       <div class="nav-sheet">
         <div class="request-top"><div><b>${route(o)}</b><small>${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')} · ${esc(t('dj.net'))} <span class="mono">${fcfa(net(o))}</span></small></div>${pill(o.status)}</div>
         ${callBlock(o, 'driver')}
+        ${safetyBar(o, 'driver')}
         ${o.status === 'pickup' ? `<div class="code-box code-box-driver">
           <span>${esc(t('cv.verifyT'))}</span><b class="mono">${esc((o.clientPhone || '').slice(-4))}</b>
           <small>${esc(t('cv.verifyS'))}</small></div>` : ''}
-        ${['loading', 'transit'].includes(o.status) ? `
-        <div class="photo-row">
-          ${photoInput(o, 'start', t('t.photosStart'))}
-          ${o.status === 'transit' ? photoInput(o, 'end', t('t.photosEnd')) : ''}
-        </div>
+        ${o.status === 'loading' ? `
+        <div class="photo-row">${photoInput(o, 'start', t('t.photosStart'))}</div>
         ${proofThumbs(o)}
-        <p class="hint">${esc(t(o.status === 'loading' ? 'nv.startNote' : 'd.proofHint2'))}</p>` : ''}
+        <p class="hint">${esc(t('nv.startNote'))}</p>` : ''}
+        ${o.status === 'arrived' ? `
+        <div class="photo-row">${photoInput(o, 'end', t('t.photosEnd'))}</div>
+        ${proofThumbs(o, 'end')}
+        <p class="hint${o.photos.end < store.END_PHOTOS_MIN ? ' is-todo' : ''}">${esc(t('nv.endNote', { n: store.END_PHOTOS_MIN, k: o.photos.end }))}</p>` : ''}
         ${o.status === 'arrived' ? codeForm(o) : ''}
-        ${nextKey ? `<button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-next" data-id="${o.id}">${['assigned', 'pickup', 'loading'].includes(o.status) ? '◉ ' : ''}${esc(t(nextKey))}</button>` : ''}
+        ${nextKey ? `<button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-next" data-id="${o.id}">${['assigned', 'loading'].includes(o.status) ? '◉ ' : ''}${esc(t(nextKey))}</button>` : ''}
         <details class="nav-more"><summary>${esc(t('nv.details'))}</summary>
           <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
           ${clientMedia(o)}
@@ -1660,13 +1671,46 @@
     </section>`;
   }
 
+  // Sécurité pendant la course (chauffeur et client) : partager sa position par WhatsApp, bouton urgence.
+  function safetyBar(o, side) {
+    return `<div class="safety-bar">
+        <button class="btn btn-wa btn-sm" type="button" data-act="share-loc" data-id="${o.id}" data-side="${side}">📍 ${esc(t('loc.share'))}</button>
+        <button class="btn btn-danger btn-sm" type="button" data-act="o-sos" data-id="${o.id}">${esc(t('sf.sos'))}</button>
+      </div>
+      ${view.sosFor === o.id ? `<div class="confirm-inline sos-box" role="alertdialog" aria-label="${esc(t('sf.sos'))}">
+        <p><b>${esc(t('sos.q'))}</b></p>
+        <button class="btn btn-danger btn-block" type="button" data-act="o-sos-yes" data-id="${o.id}" data-side="${side}">${esc(t('sf.sosYes'))}</button>
+        <div class="sos-calls">${[['110', 'sos.police'], ['180', 'sos.fire'], ['185', 'sos.samu']].map(([n, k]) => `<a class="btn btn-ghost btn-sm" href="tel:${n}">${esc(t(k))} ${n}</a>`).join('')}</div>
+        <p class="hint">${esc(t('sos.note'))}</p>
+        <button class="link-btn" type="button" data-act="o-sos-no">${esc(t('a.resetNo'))}</button>
+      </div>` : ''}`;
+  }
+  // Position GPS du téléphone (null si refusée ou indisponible).
+  function getPosition(timeout = 8000) {
+    return new Promise(resolve => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(p => resolve({ lat: +p.coords.latitude.toFixed(5), lon: +p.coords.longitude.toFixed(5) }), () => resolve(null), { enableHighAccuracy: true, timeout, maximumAge: 30000 });
+    });
+  }
+  async function shareLocation(o, side) {
+    // La fenêtre s'ouvre tout de suite (sinon le navigateur la bloque), puis reçoit le lien WhatsApp.
+    const w = window.open('', '_blank');
+    const pos = await getPosition();
+    const msg = t(side === 'driver' ? 'loc.msgD' : 'loc.msgC', {
+      r: `${commune(o.from).name} → ${commune(o.to).name}`, d: o.driver ? o.driver.name : '', pl: o.driver ? o.driver.plate : '',
+      l: pos ? `https://maps.google.com/?q=${pos.lat},${pos.lon}` : t('loc.none') });
+    const url = waLink('', msg);
+    if (w) w.location.href = url; else location.href = url;
+  }
+
   // À l'arrivée, le chauffeur saisit le code à 4 chiffres donné par le client : la course est validée et payée.
   function codeForm(o) {
     const locked = (o.codeTries || 0) >= store.CODE_TRIES;
-    return `<form class="code-form" id="codeForm" data-id="${o.id}" novalidate>
+    const needPhotos = o.driver && o.driver.me && (o.photos.end || 0) < store.END_PHOTOS_MIN;
+    return `<form class="code-form${needPhotos ? ' is-off' : ''}" id="codeForm" data-id="${o.id}" novalidate>
       <b>${esc(t('dc.enterT'))}</b>
-      <p class="hint">${esc(t('dc.enterS'))}</p>
-      ${locked ? `<p class="notice">${esc(t('dc.locked'))}</p>` : `
+      <p class="hint">${esc(t(needPhotos ? 'dc.needPhotos' : 'dc.enterS', { n: store.END_PHOTOS_MIN }))}</p>
+      ${locked ? `<p class="notice">${esc(t('dc.locked'))}</p>` : needPhotos ? '' : `
       <input id="dc-in" class="code-in mono" type="text" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="····" aria-label="${esc(t('dc.enterT'))}">
       ${view.codeErr ? `<p class="field-error" role="alert">${esc(view.codeErr)}</p>` : ''}
       <button class="btn btn-signal btn-block btn-xl" type="submit">${esc(t('dc.validate'))}</button>`}
@@ -2538,7 +2582,11 @@
     if (!n) return '';
     const o = n.orderId && store.getOrder(n.orderId);
     if (n.kind === 'request' && (!o || o.status !== 'open')) { view.dnotif = null; return ''; }
-    if (n.kind === 'request' && view.reqFull) return '';
+    // Pas de nouvelle demande par-dessus la demande ouverte ou pendant une course en cours.
+    const busy = store.state.orders.some(x => x.driver && x.driver.me && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(x.status));
+    if (n.kind === 'request' && (view.reqFull || busy)) return '';
+    // L'alerte de solde disparaît dès que le solde est rechargé.
+    if (n.kind !== 'request' && store.available() >= BALANCE_ALERTS[0]) { view.dnotif = null; return ''; }
     return `<div class="notif notif-${n.kind}${n.level === 2 ? ' is-ko' : ''}" role="alert">
       <span class="notif-ic" aria-hidden="true">${n.kind === 'request' ? '●' : '!'}</span>
       <div class="notif-txt"><b>${esc(n.title)}</b><span>${esc(n.body)}</span></div>
@@ -3028,6 +3076,16 @@
       'nv.startNote': 'Prenez des photos du chargement : elles sont obligatoires pour démarrer, avec un scan du visage.', 'nv.needPhotos': 'Prenez d’abord au moins une photo du chargement.',
       'd.proofHint2': 'Photos = preuve en cas de litige.', 'd.next.loading': 'Démarrer la course', 'd.next.transit': 'Je suis arrivé',
       'vv.reprop': 'Proposer un autre prix', 'da.selfie': 'Scan du visage en direct',
+      'rc.other': 'Autre montant', 'rc.ph': 'Montant', 'rc.go': 'Recharger', 'rc.min': 'Recharge minimum : {p}.',
+      'loc.share': 'Partager ma position', 'loc.none': 'position GPS indisponible',
+      'loc.msgD': 'Takaata · Je suis en course {r} ({pl}). Ma position : {l}',
+      'loc.msgC': 'Takaata · Ma course {r} avec {d} ({pl}). Ma position : {l}',
+      'sos.q': 'Vous êtes en danger ? Alertez Takaata : le support reçoit votre position et vous rappelle immédiatement.',
+      'sos.police': 'Police', 'sos.fire': 'Pompiers', 'sos.samu': 'SAMU', 'sos.note': 'Numéros d’urgence à vérifier avant le lancement (110 ou 111 pour la police).',
+      'nv.accepted': 'Course acceptée', 'nv.lockedT': 'Prêt à partir ?', 'nv.lockedS': 'Appuyez sur « Je pars maintenant » : un scan rapide du visage, puis l’itinéraire s’affiche.',
+      'nv.endNote': 'Photographiez la marchandise livrée : {n} photos minimum avant le code ({k} prise(s)).',
+      'dc.needPhotos': 'Prenez d’abord {n} photos de la marchandise livrée, puis saisissez le code du client.',
+      'd.next.assigned': 'Je pars maintenant',
       'd.accept': 'Accepter · gain {p}', 'd.counterNet': 'Votre gain net souhaité', 'd.belowMinNet': 'Gain net minimum pour cette course : {min}.',
       'd.offerSentNet': 'Offre envoyée : gain net {p}. En attente du client.', 'dg.lineNet': 'Gain net',
       'd.cashHint': 'Paiement en espèces : encaissez {p} auprès du client. Votre gain net : {n}.'
@@ -3059,6 +3117,16 @@
       'nv.startNote': 'Take photos of the load: they are required to start, with a face scan.', 'nv.needPhotos': 'First take at least one photo of the load.',
       'd.proofHint2': 'Photos = proof in case of dispute.', 'd.next.loading': 'Start the trip', 'd.next.transit': 'I have arrived',
       'vv.reprop': 'Offer another price', 'da.selfie': 'Live face scan',
+      'rc.other': 'Other amount', 'rc.ph': 'Amount', 'rc.go': 'Top up', 'rc.min': 'Minimum top-up: {p}.',
+      'loc.share': 'Share my location', 'loc.none': 'GPS location unavailable',
+      'loc.msgD': 'Takaata · I am on a trip {r} ({pl}). My location: {l}',
+      'loc.msgC': 'Takaata · My trip {r} with {d} ({pl}). My location: {l}',
+      'sos.q': 'In danger? Alert Takaata: support receives your location and calls you back immediately.',
+      'sos.police': 'Police', 'sos.fire': 'Fire', 'sos.samu': 'Ambulance', 'sos.note': 'Emergency numbers to be checked before launch (110 or 111 for the police).',
+      'nv.accepted': 'Trip accepted', 'nv.lockedT': 'Ready to go?', 'nv.lockedS': 'Tap “I’m leaving now”: a quick face scan, then the route appears.',
+      'nv.endNote': 'Photograph the delivered goods: at least {n} photos before the code ({k} taken).',
+      'dc.needPhotos': 'First take {n} photos of the delivered goods, then enter the customer’s code.',
+      'd.next.assigned': 'I’m leaving now',
       'd.accept': 'Accept · earn {p}', 'd.counterNet': 'Net earnings you want', 'd.belowMinNet': 'Minimum net earnings for this trip: {min}.',
       'd.offerSentNet': 'Offer sent: net {p}. Waiting for the customer.', 'dg.lineNet': 'Net earnings',
       'd.cashHint': 'Cash payment: collect {p} from the customer. Your net earnings: {n}.'
@@ -3217,6 +3285,15 @@
         break;
       }
       case 'rf-open': openRequest(id); render(); break;
+      case 'share-loc': { const o = store.getOrder(id); if (o) shareLocation(o, b.dataset.side); break; }
+      case 'o-sos': view.sosFor = view.sosFor === id ? null : id; render(); break;
+      case 'o-sos-no': view.sosFor = null; render(); break;
+      case 'o-sos-yes': {
+        const side = b.dataset.side;
+        view.sosFor = null; render();
+        getPosition(4000).then(pos => { store.orderSos(id, side, pos); ui.toast(t('sf.sent')); });
+        break;
+      }
       case 'rf-close': if (view.dnotif && view.dnotif.orderId === view.reqFull) view.dnotif = null; view.reqFull = null; render(); break;
       case 'img-view': { const o = store.getOrder(id); if (o) imgView(o, b.dataset.k, +b.dataset.i); break; }
       case 'd-cam': {
@@ -3353,8 +3430,7 @@
       }
       case 'recharge': {
         const n = +b.dataset.n;
-        store.recharge(n, document.getElementById('rcChannel').value);
-        ui.toast(t('toast.recharged', { p: fcfa(n) }));
+        if (store.recharge(n, document.getElementById('rcChannel').value)) ui.toast(t('toast.recharged', { p: fcfa(n) }));
         break;
       }
       case 'd-accept': {
@@ -3371,9 +3447,9 @@
       case 'd-next': {
         const o = store.getOrder(id);
         if (!o) break;
-        // Scan du visage au départ vers le chargement, à l'arrivée au chargement et au démarrage de la course
-        // (photos du chargement obligatoires) : c'est bien le même chauffeur du début à la fin.
-        const FACE_STEP = { assigned: 'leave', pickup: 'load', loading: 'start' };
+        // Deux scans du visage : au départ vers le client (« Je pars maintenant »), puis au démarrage de la course
+        // après les photos du chargement. C'est bien le même chauffeur du début à la fin.
+        const FACE_STEP = { assigned: 'leave', loading: 'start' };
         if (o.status === 'loading' && !o.photos.start) { ui.toast(t('nv.needPhotos')); break; }
         if (FACE_STEP[o.status]) {
           faceGate(FACE_STEP[o.status], id).then(ok => { if (ok) store.advance(id); });
@@ -3636,10 +3712,17 @@
       view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
       if (res.ok) { view.counterFor = null; view.reqFull = null; ui.toast(t('nt.sent')); }
       render();
+    } else if (f.id === 'rcForm') {
+      const n = Math.round(Number(document.getElementById('rc-amount').value) || 0);
+      if (n < store.RECHARGE_MIN) { ui.toast(t('rc.min', { p: fcfa(store.RECHARGE_MIN) })); return; }
+      store.recharge(n, document.getElementById('rcChannel').value);
+      document.getElementById('rc-amount').value = '';
+      ui.toast(t('toast.recharged', { p: fcfa(n) }));
     } else if (f.id === 'codeForm') {
       const id = f.dataset.id, val = (document.getElementById('dc-in').value || '').replace(/\D/g, '');
       if (val.length !== 4) { view.codeErr = t('dc.four'); render(); return; }
       const res = store.submitDeliveryCode(id, val);
+      if (res.photos) { view.codeErr = t('dc.needPhotos', { n: store.END_PHOTOS_MIN }); render(); return; }
       if (res.ok) { view.codeErr = ''; ui.toast(t('dc.ok')); render(); return; }
       view.codeErr = res.locked ? '' : t('dc.bad', { n: res.left });
       render();
