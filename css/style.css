@@ -1193,3 +1193,17 @@ html.sheet-open { overflow: hidden; }
 .truck-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .truck-foot b { font-size: 17px; margin-left: 4px; }
 .viv-driver .weight-bar i { background: var(--signal); }
+
+/* WhatsApp, propositions de prix, sécurité */
+.btn-wa { background: #1FA855; color: #FFFFFF; }
+.btn-wa:hover { filter: brightness(1.06); }
+.wa-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: var(--r); background: var(--surface); border: 1.5px solid #1FA855; }
+.wa-card > div { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.wa-ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #1FA855; }
+.wa-ic svg { width: 24px; height: 24px; fill: none; stroke: #FFFFFF; stroke-width: 1.8; stroke-linejoin: round; }
+.prop-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border-radius: var(--r-sm); background: var(--surface-2); }
+.prop-form .price-input input { font-size: 18px; width: 150px; min-height: 40px; }
+.prop-form .hint { width: 100%; }
+.truck-foot .btn-row { justify-content: flex-end; }
+.safety { display: grid; gap: 10px; padding: 14px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
+.adm-report.is-urgent { border: 2px solid var(--danger); background: var(--danger-soft); }

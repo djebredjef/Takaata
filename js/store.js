@@ -53,6 +53,7 @@
       reports: [],
       leads: [],
       pricing: null,
+      settings: { whatsapp: '' },  // numéro WhatsApp Takaata pour les réservations des commerçantes
       events: [],
       trips: null,      // trajets « Vivriers vers Abidjan » publiés par les chauffeurs
       admin: { ownerHash: '', staff: [] },  // accès à la console : administrateur principal + collaborateurs       // journal d'usage pour les analyses (publication, offres, refus, annulations…)    // grille modifiée depuis l'Admin (null = grille du business plan)
@@ -393,6 +394,16 @@
         changed = true;
       }
     }
+    for (const trip of state.trips || []) {
+      for (const b of trip.bookings) {
+        if (b.status === 'proposed' && b.answerAt && now >= b.answerAt) {
+          delete b.answerAt;
+          answerProposal(trip.id, b.id, b.unitPrice >= trip.pricePerUnit * 0.85);
+          events.push({ type: 'proposal', trip, booking: b });
+          changed = true;
+        }
+      }
+    }
     const me = drv();
     if (me && me.online && me.status === 'approved' && !me.suspended && now - lastSpawn > 25000) {
       const waiting = state.orders.filter(o => o.status === 'open' && o.vehicle === me.vehicle && !(me.declined && me.declined[o.id])).length;
@@ -538,7 +549,7 @@
   }
   const arrivalTime = trip => stopTime(trip, 'gesco');
   function tripLoad(trip) {
-    const live = trip.bookings.filter(b => b.status !== 'cancelled');
+    const live = trip.bookings.filter(b => !['cancelled', 'refused'].includes(b.status));
     return { units: live.reduce((a, b) => a + b.units, 0), seats: live.reduce((a, b) => a + b.seats, 0) };
   }
   function tripsState() { if (!state.trips) seedTrips(); return state.trips; }
@@ -577,9 +588,10 @@
     return t;
   }
 
-  function quoteBooking(trip, units, seats) {
-    const total = units * trip.pricePerUnit + seats * trip.pricePerSeat;
-    return { total, deposit: Math.max(500, roundUp100(total * DEPOSIT_RATE)), fee: Math.round(total * TK.COMMISSION_RATE) };
+  // Commission sur la marchandise seulement : les places passagers reviennent entièrement au chauffeur.
+  function quoteBooking(trip, units, seats, unitPrice = trip.pricePerUnit) {
+    const goods = units * unitPrice, people = seats * trip.pricePerSeat, total = goods + people;
+    return { unitPrice, total, deposit: Math.max(500, roundUp100(total * DEPOSIT_RATE)), fee: Math.round(goods * TK.COMMISSION_RATE) };
   }
 
   function bookTrip(tripId, req) {
@@ -587,22 +599,58 @@
     if (!trip || trip.status !== 'scheduled') return { ok: false };
     const load = tripLoad(trip);
     if (load.units + req.units > trip.capacity || load.seats + req.seats > trip.seats) return { ok: false, full: true };
-    const q = quoteBooking(trip, req.units, req.seats);
+    // Prix proposé par la commerçante : la place est retenue en attendant la réponse du chauffeur.
+    const proposed = req.unitPrice && req.unitPrice !== trip.pricePerUnit;
+    const q = quoteBooking(trip, req.units, req.seats, req.unitPrice || trip.pricePerUnit);
     const u = user();
     const b = Object.assign({ id: trip.id + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(), client: u ? `${u.firstName} ${u.lastName}` : '', phone: state.session,
-      status: 'booked', at: Date.now() }, req, q);
+      channel: 'app', at: Date.now() }, req, q, { status: req.status || (proposed ? 'proposed' : 'booked') });
+    if (b.status === 'proposed' && trip.sim) b.answerAt = Date.now() + 4000;
     trip.bookings.push(b);
-    track('trip_booked', null, { tripId, stop: req.stop, units: req.units, seats: req.seats, price: q.total, lastMile: !!req.lastMile, driver: trip.driver });
+    track(proposed ? 'trip_proposed' : 'trip_booked', null, { tripId, stop: req.stop, units: req.units, seats: req.seats, price: q.total, unitPrice: q.unitPrice, asked: trip.pricePerUnit, lastMile: !!req.lastMile, driver: trip.driver, channel: b.channel });
     emit();
     return { ok: true, booking: b };
   }
 
+  const findBooking = (tripId, bookingId) => { const trip = tripsState().find(x => x.id === tripId); return [trip, trip && trip.bookings.find(x => x.id === bookingId)]; };
+
+  // Réponse du chauffeur à un prix proposé.
+  function answerProposal(tripId, bookingId, accept) {
+    const [trip, b] = findBooking(tripId, bookingId);
+    if (!b || b.status !== 'proposed') return;
+    b.status = accept ? 'accepted' : 'refused';
+    b.answeredAt = Date.now();
+    track(accept ? 'trip_proposal_accepted' : 'trip_proposal_refused', null, { tripId, unitPrice: b.unitPrice, asked: trip.pricePerUnit, driver: trip.driver });
+    emit();
+  }
+
+  // Acompte payé après acceptation du prix proposé.
+  function payDeposit(tripId, bookingId, payment) {
+    const [trip, b] = findBooking(tripId, bookingId);
+    if (!b || b.status !== 'accepted' || trip.status !== 'scheduled') return;
+    Object.assign(b, { status: 'booked', payment, paidAt: Date.now() });
+    track('trip_booked', null, { tripId, stop: b.stop, units: b.units, seats: b.seats, price: b.total, unitPrice: b.unitPrice, driver: trip.driver, channel: b.channel });
+    emit();
+  }
+
+  // Bouton d'urgence : alerte prioritaire pour le support Takaata.
+  function sosAlert(tripId, bookingId) {
+    const [trip, b] = findBooking(tripId, bookingId);
+    if (!b) return;
+    state.reports.unshift({ at: Date.now(), orderId: tripId, text: `URGENCE · ${b.client || ''} · ${b.phone ? '+225 ' + b.phone : ''} · trajet ${trip.driverName} (${trip.plate})`, phone: b.phone, urgent: true });
+    track('sos', null, { tripId, driver: trip.driver });
+    emit();
+  }
+
+  function setSetting(key, value) { state.settings = Object.assign({ whatsapp: '' }, state.settings, { [key]: value }); emit(); }
+
   function cancelBooking(tripId, bookingId) {
     const trip = tripsState().find(x => x.id === tripId);
     const b = trip && trip.bookings.find(x => x.id === bookingId);
-    if (!b || b.status !== 'booked' || trip.status !== 'scheduled') return;
+    if (!b || !['booked', 'proposed', 'accepted'].includes(b.status) || trip.status !== 'scheduled') return;
+    const paid = b.status === 'booked';
     b.status = 'cancelled';
-    b.refund = trip.depart - Date.now() > FREE_CANCEL_H * 36e5;
+    b.refund = !paid || trip.depart - Date.now() > FREE_CANCEL_H * 36e5;
     track('trip_cancelled', null, { tripId, units: b.units, refund: b.refund, hoursBefore: (trip.depart - Date.now()) / 36e5 });
     emit();
   }
@@ -615,7 +663,8 @@
     if (i < 0 || i >= TRIP_STEPS.length - 1) return;
     trip.status = TRIP_STEPS[i + 1];
     trip[trip.status + 'At'] = Date.now();
-    const live = trip.bookings.filter(b => b.status !== 'cancelled' && !b.other);
+    if (trip.status === 'departed') trip.bookings.filter(b => ['proposed', 'accepted'].includes(b.status)).forEach(b => { b.status = 'cancelled'; b.refund = true; });
+    const live = trip.bookings.filter(b => !['cancelled', 'refused'].includes(b.status) && !b.other);
     if (trip.status === 'departed') live.forEach(b => { b.status = 'boarded'; });
     if (trip.status === 'arrived') {
       live.forEach(b => {
@@ -713,6 +762,7 @@
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
       held, available, NEXT, AUTO_CLOSE_MS, canCall,
       adminState, setOwnerHash, addStaff, removeStaff, touchStaff, DRIVER_POOL,
+      answerProposal, payDeposit, sosAlert, setSetting,
       CORRIDOR, stopOf, stopTime, arrivalTime, tripLoad, tripsState, publishTrip, quoteBooking, bookTrip, cancelBooking, advanceTrip, myBookings, seedTrips,
       DEPOSIT_RATE, FREE_CANCEL_H
     }

@@ -1731,7 +1731,7 @@
     if (!s.reports.length) return `<p class="empty">${esc(t('ad.noReports'))}</p>`;
     return `<ol class="adm-list">${s.reports.map(r => {
       const o = r.orderId && store.getOrder(r.orderId);
-      return `<li class="adm-card adm-report${r.resolved ? ' is-done' : ''}">
+      return `<li class="adm-card adm-report${r.resolved ? ' is-done' : ''}${r.urgent ? ' is-urgent' : ''}">
         <div class="adm-report-top"><span class="pill pill-${r.resolved ? 'delivered' : 'open'}">${esc(t(r.resolved ? 'ad.resolved1' : 'ad.open1'))}</span>
           ${o ? `<button type="button" class="link-btn mono" data-act="adm-order" data-id="${o.id}">${esc(o.id)} · ${route(o)}</button>` : ''}<span class="mono adm-date">${dt(r.at)}</span></div>
         <p>${esc(r.text)}</p>
@@ -1755,6 +1755,7 @@
         <label class="field"><span>${esc(t('ad.floorFee'))}</span><input class="mono" type="number" min="0" step="50" id="pr-floor" value="${TK.OPTIONS.floor}"></label>
       </div>
       <p class="hint">${esc(t('ad.priceNote'))} ${esc(t('ad.example', { v: t('veh.van1t'), p: fcfa(ex) }))}</p>
+      <label class="field"><span>${esc(t('ad.wa'))}</span><span class="phone-in"><b class="mono">+225</b><input id="pr-wa" type="tel" inputmode="numeric" maxlength="14" value="${esc((store.state.settings || {}).whatsapp || '')}" placeholder="${esc(t('ad.waPh'))}"></span></label>
       <div class="btn-row">
         <button class="btn btn-signal" type="submit">${esc(t('ad.save'))}</button>
         <button class="btn btn-ghost" type="button" data-act="adm-defaults">${esc(t('ad.defaults'))}</button>
@@ -2398,7 +2399,27 @@
       'vv.dBookings': 'Réservations', 'vv.dNoBook': 'Pas encore de réservation.', 'vv.dCheck': 'code {c}',
       'vv.dBadTime': 'Choisissez une heure de départ à venir.', 'vv.dBadCap': 'Indiquez une capacité et un prix par sac.',
       'ad.trips': 'Trajets vivriers', 'vt.trips': 'Trajets à venir', 'vt.fill': 'Remplissage moyen', 'vt.units': 'Unités réservées', 'vt.onTime': 'Arrivées prévues avant 5 h',
-      'vt.col.depart': 'Départ', 'vt.col.arrive': 'Arrivée', 'vt.col.cap': 'Réservé / capacité', 'vt.col.price': 'Prix / sac', 'vt.col.amount': 'Montant'
+      'vt.col.depart': 'Départ', 'vt.col.arrive': 'Arrivée', 'vt.col.cap': 'Réservé / capacité', 'vt.col.price': 'Prix / sac', 'vt.col.amount': 'Montant',
+      'vv.propose': 'Proposer un prix', 'vv.yourPrice': 'Votre prix par sac', 'vv.sendProp': 'Envoyer ma proposition', 'vv.propNote': 'Le chauffeur accepte ou refuse. Vous payez l’acompte seulement s’il accepte.',
+      'vv.st.proposed': 'Prix proposé', 'vv.st.accepted': 'Prix accepté', 'vv.st.refused': 'Refusé',
+      'vv.waitAnswer': 'Votre proposition de {p} par sac est envoyée. Le chauffeur répond en général en quelques minutes.',
+      'vv.acceptedS': 'Le chauffeur accepte {p} par sac. Payez l’acompte pour confirmer votre place.', 'vv.refusedS': 'Le chauffeur a refusé {p} par sac.',
+      'vv.atDriverPrice': 'Réserver au prix du chauffeur ({p})', 'vv.propAccepted': 'Votre prix a été accepté', 'vv.propRefused': 'Votre prix a été refusé',
+      'vv.waT': 'Pas d’application ? Réservez par WhatsApp', 'vv.waS': 'Envoyez votre demande à Takaata : un agent réserve pour vous et vous confirme par message.',
+      'vv.waBtn': 'Réserver par WhatsApp', 'vv.waNone': 'Numéro WhatsApp Takaata à définir par l’administrateur.',
+      'vv.waMsg': 'Bonjour Takaata, je veux réserver un camion vers Abidjan. Montée : {s}. Nuit : {n}. Marchandise : {u} {k}. Personnes : {p}.{x}',
+      'vv.waLast': ' Continuer jusqu’au marché d’Adjamé.',
+      'sf.title': 'Votre sécurité', 'sf.share': 'Partager mon trajet avec un proche', 'sf.shareMsg': 'Je voyage avec Takaata : {d} ({pl}), départ de {s} vers {h}, arrivée prévue à Gesco vers {a}. Code de montée {c}.',
+      'sf.sos': 'Urgence', 'sf.sosQ': 'Alerter Takaata maintenant ? Le support vous rappelle immédiatement.', 'sf.sosYes': 'Alerter Takaata', 'sf.sent': 'Alerte envoyée au support Takaata.',
+      'sf.numbers': 'Numéros d’urgence (à vérifier) : police 110 ou 111 · pompiers 180 · SAMU 185', 'sf.verified': 'Chauffeur vérifié : pièce d’identité, permis et véhicule contrôlés.',
+      'vv.dProps': 'Prix proposés', 'vv.depDue': 'acompte {p} FCFA à encaisser', 'vv.dAccept': 'Accepter', 'vv.dRefuse': 'Refuser', 'vv.dProp': 'propose {p} / sac (votre prix {q})',
+      'vv.dNet': 'Total réservé {p} · votre gain net {n} (places passagers sans commission)',
+      'ag.title': 'Réservation par WhatsApp ou téléphone', 'ag.sub': 'Un agent saisit la réservation pour une commerçante qui n’a pas l’application.',
+      'ag.trip': 'Camion', 'ag.name': 'Nom de la commerçante', 'ag.phone': 'Son numéro', 'ag.paid': 'Acompte', 'ag.paidYes': 'Payé', 'ag.paidNo': 'À payer à la montée',
+      'ag.save': 'Enregistrer la réservation', 'ag.done': 'Réservation enregistrée pour {n}.', 'ag.confirm': 'Envoyer la confirmation par WhatsApp',
+      'ag.confirmMsg': 'Takaata : votre place est réservée. Camion de {d} ({pl}), passage à {s} vers {h}, arrivée à Gesco vers {a}. {u} {k}, {p} personne(s). Total {t}. Code de montée : {c}.',
+      'ag.err': 'Choisissez un camion avec assez de place et un numéro ivoirien valide.',
+      'ad.wa': 'Numéro WhatsApp Takaata (réservations des commerçantes)', 'ad.waPh': 'ex. 07 00 00 00 00', 'ad.waSaved': 'Numéro WhatsApp enregistré'
     },
     en: {
       'need.vivriers': 'Produce to Abidjan', 'needd.vivriers': 'Trucks coming down from Bouaké, book per sack',
@@ -2425,10 +2446,32 @@
       'vv.dBookings': 'Bookings', 'vv.dNoBook': 'No bookings yet.', 'vv.dCheck': 'code {c}',
       'vv.dBadTime': 'Choose a future departure time.', 'vv.dBadCap': 'Enter a capacity and a price per sack.',
       'ad.trips': 'Produce trips', 'vt.trips': 'Upcoming trips', 'vt.fill': 'Average fill rate', 'vt.units': 'Units booked', 'vt.onTime': 'Planned arrivals before 5 am',
-      'vt.col.depart': 'Departure', 'vt.col.arrive': 'Arrival', 'vt.col.cap': 'Booked / capacity', 'vt.col.price': 'Price / sack', 'vt.col.amount': 'Amount'
+      'vt.col.depart': 'Departure', 'vt.col.arrive': 'Arrival', 'vt.col.cap': 'Booked / capacity', 'vt.col.price': 'Price / sack', 'vt.col.amount': 'Amount',
+      'vv.propose': 'Propose a price', 'vv.yourPrice': 'Your price per sack', 'vv.sendProp': 'Send my offer', 'vv.propNote': 'The driver accepts or refuses. You pay the deposit only if they accept.',
+      'vv.st.proposed': 'Price proposed', 'vv.st.accepted': 'Price accepted', 'vv.st.refused': 'Refused',
+      'vv.waitAnswer': 'Your offer of {p} per sack has been sent. Drivers usually answer within minutes.',
+      'vv.acceptedS': 'The driver accepts {p} per sack. Pay the deposit to confirm your space.', 'vv.refusedS': 'The driver refused {p} per sack.',
+      'vv.atDriverPrice': 'Book at the driver’s price ({p})', 'vv.propAccepted': 'Your price was accepted', 'vv.propRefused': 'Your price was refused',
+      'vv.waT': 'No app? Book on WhatsApp', 'vv.waS': 'Send your request to Takaata: an agent books for you and confirms by message.',
+      'vv.waBtn': 'Book on WhatsApp', 'vv.waNone': 'Takaata WhatsApp number to be set by the administrator.',
+      'vv.waMsg': 'Hello Takaata, I want to book a truck to Abidjan. Pickup: {s}. Night: {n}. Goods: {u} {k}. People: {p}.{x}',
+      'vv.waLast': ' Continue to Adjamé market.',
+      'sf.title': 'Your safety', 'sf.share': 'Share my trip with someone', 'sf.shareMsg': 'I am travelling with Takaata: {d} ({pl}), leaving {s} around {h}, expected at Gesco around {a}. Boarding code {c}.',
+      'sf.sos': 'Emergency', 'sf.sosQ': 'Alert Takaata now? Support will call you back immediately.', 'sf.sosYes': 'Alert Takaata', 'sf.sent': 'Alert sent to Takaata support.',
+      'sf.numbers': 'Emergency numbers (to be checked): police 110 or 111 · fire 180 · ambulance 185', 'sf.verified': 'Verified driver: ID, licence and vehicle checked.',
+      'vv.dProps': 'Price offers', 'vv.depDue': 'deposit {p} FCFA to collect', 'vv.dAccept': 'Accept', 'vv.dRefuse': 'Refuse', 'vv.dProp': 'offers {p} / sack (your price {q})',
+      'vv.dNet': 'Total booked {p} · your net {n} (passenger seats without commission)',
+      'ag.title': 'Booking by WhatsApp or phone', 'ag.sub': 'An agent enters the booking for a trader who does not use the app.',
+      'ag.trip': 'Truck', 'ag.name': 'Trader’s name', 'ag.phone': 'Her number', 'ag.paid': 'Deposit', 'ag.paidYes': 'Paid', 'ag.paidNo': 'To pay when boarding',
+      'ag.save': 'Save booking', 'ag.done': 'Booking saved for {n}.', 'ag.confirm': 'Send confirmation on WhatsApp',
+      'ag.confirmMsg': 'Takaata: your space is booked. Truck of {d} ({pl}), passing {s} around {h}, arriving at Gesco around {a}. {u} {k}, {p} person(s). Total {t}. Boarding code: {c}.',
+      'ag.err': 'Choose a truck with enough space and a valid Ivorian number.',
+      'ad.wa': 'Takaata WhatsApp number (traders’ bookings)', 'ad.waPh': 'e.g. 07 00 00 00 00', 'ad.waSaved': 'WhatsApp number saved'
     }
   });
 
+  const waLink = (phone, text) => `https://wa.me/${phone ? '225' + phone : ''}?text=${encodeURIComponent(text)}`;
+  const pillFor = st => ({ cancelled: 'cancelled', refused: 'cancelled', booked: 'open', proposed: 'open', accepted: 'open' }[st] || 'delivered');
   const hm = ts => new Date(ts).toLocaleTimeString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
   const dayLabel = ts => new Date(ts).toLocaleDateString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   const STOPS = () => store.CORRIDOR.stops;
@@ -2482,11 +2525,29 @@
             </ol>
             <p class="hint">${esc(t('vv.left', { u: tr.capacity - load.units, s: tr.seats - load.seats }))} · ${esc(t('vv.perUnit', { p: fcfa(tr.pricePerUnit) }))} · ${esc(t('vv.perSeat', { p: fcfa(tr.pricePerSeat) }))}</p>
             <div class="truck-foot"><span>${esc(t('vv.total'))} <b class="mono">${fcfa(q.total)}</b></span>
-              <button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${tr.id}">${esc(t('vv.reserve', { p: fcfa(q.deposit) }))}</button></div>
+              <div class="btn-row">
+                <button class="btn btn-ghost btn-sm" type="button" data-act="vv-prop-open" data-id="${tr.id}">${esc(t('vv.propose'))}</button>
+                <button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${tr.id}">${esc(t('vv.reserve', { p: fcfa(q.deposit) }))}</button>
+              </div></div>
+            ${v.propFor === tr.id ? `<form class="prop-form" data-id="${tr.id}">
+              <label class="price-input"><span class="sr-only">${esc(t('vv.yourPrice'))}</span><input type="number" id="vp-${tr.id}" step="50" min="100" value="${TK.roundUp100(tr.pricePerUnit * 0.9)}" inputmode="numeric"><span>FCFA</span></label>
+              <button class="btn btn-signal btn-sm" type="submit">${esc(t('vv.sendProp'))}</button>
+              <p class="hint">${esc(t('vv.yourPrice'))} · ${esc(t('vv.propNote'))}</p></form>` : ''}
           </article>`;
         }).join('')}</div>` : `<p class="empty">${esc(t('vv.none'))}</p>`}
         <p class="hint">${esc(t('vv.example'))}</p>
-      </section>`;
+      </section>
+      ${waCard(v)}`;
+  }
+
+  function waCard(v) {
+    const num = (store.state.settings || {}).whatsapp;
+    const msg = t('vv.waMsg', { s: store.stopOf(v.stop).name, n: t('vv.' + v.night), u: v.units, k: t('vv.' + v.kind).toLowerCase(), p: v.seats, x: v.lastMile ? t('vv.waLast') : '' });
+    return `<section class="wa-card">
+      <span class="wa-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 1.8 2.6 4.2 4.5 4.6l1-1.2 2 .9c-.3 1.3-1.4 2-2.7 1.7-2.9-.7-5.6-3.4-6.2-6.2-.3-1.3.4-2.4 1.7-2.7l.9 2z"/></svg></span>
+      <div><b>${esc(t('vv.waT'))}</b><p class="hint">${esc(t('vv.waS'))}</p>
+        ${num ? `<a class="btn btn-wa btn-sm" href="${waLink(num, msg)}" target="_blank" rel="noopener">${esc(t('vv.waBtn'))} · +225 ${esc(num.replace(/(\d{2})(?=\d)/g, '$1 '))}</a>` : `<p class="hint">${esc(t('vv.waNone'))}</p>`}</div>
+    </section>`;
   }
 
   function vivConfirm(v) {
@@ -2539,7 +2600,7 @@
     const lm = b.lastMileOrder && store.getOrder(b.lastMileOrder);
     return `<section class="app-sec">
       <div class="wiz-head"><button class="link-btn" type="button" data-act="orders">← ${esc(t('c.history'))}</button><span class="mono">${esc(b.id)}</span></div>
-      <div class="order-top"><h1 class="app-title">${esc(store.stopOf(b.stop).name)} → Gesco</h1><span class="pill pill-${b.status === 'cancelled' ? 'cancelled' : b.status === 'booked' ? 'open' : 'delivered'}">${esc(t('vv.st.' + b.status))}</span></div>
+      <div class="order-top"><h1 class="app-title">${esc(store.stopOf(b.stop).name)} → Gesco</h1><span class="pill pill-${pillFor(b.status)}">${esc(t('vv.st.' + b.status))}</span></div>
       <p class="sub">${dayLabel(trip.depart)} · ${esc(t('vv.passes', { s: store.stopOf(b.stop).name, h: hm(store.stopTime(trip, b.stop)) }))} · ${esc(t('vv.arrives', { h: hm(store.arrivalTime(trip)) }))}</p>
       ${b.status !== 'cancelled' ? `<div class="code-box"><span>${esc(t('vv.code'))}</span><b class="mono">${esc((b.phone || '').slice(-4))}</b><small>${esc(t('cv.clientCodeS'))}</small></div>` : ''}
       <article class="driver-card"><span class="avatar avatar-lg" aria-hidden="true">${initials(trip.driverName)}</span>
@@ -2549,13 +2610,37 @@
       <dl class="kv">
         <div><dt>${esc(t('vv.load'))}</dt><dd>${b.units} × ${esc(t('vv.' + b.unitKind))} · ${b.seats} pers.</dd></div>
         <div><dt>${esc(t('vv.total'))}</dt><dd class="mono">${fcfa(b.total)}</dd></div>
-        <div><dt>${esc(t('vv.deposit'))}</dt><dd class="mono">${fcfa(b.deposit)} · ${esc(t('pay.' + b.payment))}</dd></div>
+        <div><dt>${esc(t('vv.yourPrice'))}</dt><dd class="mono">${fcfa(b.unitPrice || trip.pricePerUnit)}</dd></div>
+        <div><dt>${esc(t('vv.deposit'))}</dt><dd class="mono">${fcfa(b.deposit)}${b.status === 'booked' || b.paidAt ? ' · ' + esc(t('pay.' + (b.payment || 'orange'))) : ''}</dd></div>
         <div><dt>${esc(t('vv.rest'))}</dt><dd class="mono">${fcfa(b.total - b.deposit)}</dd></div>
       </dl>
       ${b.status === 'cancelled' ? `<p class="notice">${esc(b.refund ? t('vv.refund') : t('vv.noRefund', { h: store.FREE_CANCEL_H }))}</p>` : ''}
+      ${b.status === 'proposed' ? `<p class="notice pulse">${esc(t('vv.waitAnswer', { p: fcfa(b.unitPrice) }))}</p>` : ''}
+      ${b.status === 'accepted' ? `<div class="confirm-box"><p><b>${esc(t('vv.acceptedS', { p: fcfa(b.unitPrice) }))}</b></p>
+        <fieldset class="chips"><legend>${esc(t('vv.payWith'))}</legend>${PAYMENTS.slice(1).map(p => `<label class="chip-radio"><input type="radio" name="vv-pay" value="${p}" data-viv="pay"${vivState().pay === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}</fieldset>
+        <button class="btn btn-signal btn-block" type="button" data-act="vv-paydep" data-trip="${trip.id}" data-id="${b.id}">${esc(t('vv.pay', { p: fcfa(b.deposit) }))}</button></div>` : ''}
+      ${b.status === 'refused' ? `<div class="confirm-inline"><p>${esc(t('vv.refusedS', { p: fcfa(b.unitPrice) }))}</p>
+        <button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${trip.id}">${esc(t('vv.atDriverPrice', { p: fcfa(trip.pricePerUnit) }))}</button></div>` : ''}
+      ${['booked', 'boarded'].includes(b.status) ? safetyBlock(trip, b) : ''}
       ${lm ? `<div class="confirm-box"><p>${esc(t('vv.lastMileOrder'))}</p><button class="btn btn-signal btn-sm" type="button" data-act="open-order" data-id="${lm.id}">${esc(t('vv.see'))}</button></div>` : ''}
       ${trip.status !== 'done' && b.status !== 'cancelled' && trip.sim ? `<button class="link-btn demo-btn" type="button" data-act="vv-advance" data-id="${trip.id}">${esc(t('vv.demoNext'))} →</button>` : ''}
-      ${trip.status === 'scheduled' && b.status === 'booked' ? `<button class="link-btn danger" type="button" data-act="vv-cancel" data-trip="${trip.id}" data-id="${b.id}">${esc(t('vv.cancel'))}</button>` : ''}
+      ${trip.status === 'scheduled' && ['booked', 'proposed', 'accepted'].includes(b.status) ? `<button class="link-btn danger" type="button" data-act="vv-cancel" data-trip="${trip.id}" data-id="${b.id}">${esc(t('vv.cancel'))}</button>` : ''}
+    </section>`;
+  }
+
+  function safetyBlock(trip, b) {
+    const msg = t('sf.shareMsg', { d: trip.driverName, pl: trip.plate, s: store.stopOf(b.stop).name, h: hm(store.stopTime(trip, b.stop)), a: hm(store.arrivalTime(trip)), c: (b.phone || '').slice(-4) });
+    return `<section class="safety">
+      <h2 class="app-h">${esc(t('sf.title'))}</h2>
+      <p class="hint">✓ ${esc(t('sf.verified'))}</p>
+      <div class="btn-row">
+        <a class="btn btn-wa btn-sm" href="${waLink('', msg)}" target="_blank" rel="noopener">${esc(t('sf.share'))}</a>
+        <button class="btn btn-danger btn-sm" type="button" data-act="sf-sos">${esc(t('sf.sos'))}</button>
+      </div>
+      ${view.sosAsk ? `<div class="confirm-inline"><p>${esc(t('sf.sosQ'))}</p><div class="btn-row">
+        <button class="btn btn-danger btn-sm" type="button" data-act="sf-sos-yes" data-trip="${trip.id}" data-id="${b.id}">${esc(t('sf.sosYes'))}</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-act="sf-sos-no">${esc(t('a.resetNo'))}</button></div></div>` : ''}
+      <p class="hint">${esc(t('sf.numbers'))}</p>
     </section>`;
   }
 
@@ -2564,7 +2649,7 @@
     if (!list.length) return '';
     return `<h2 class="app-h">${esc(t('vv.my'))}</h2><div class="stack">${list.map(({ trip, b }) => `<button class="order-row" type="button" data-act="vv-open" data-id="${b.id}">
       <span class="order-row-main"><b>${esc(store.stopOf(b.stop).name)} → Gesco</b><small>${dayLabel(trip.depart)} · ${hm(store.stopTime(trip, b.stop))} · ${b.units} × ${esc(t('vv.' + b.unitKind))}</small></span>
-      <span class="order-row-side"><span class="mono">${fcfa(b.total)}</span><span class="pill pill-${b.status === 'cancelled' ? 'cancelled' : b.status === 'booked' ? 'open' : 'delivered'}">${esc(t('vv.st.' + b.status))}</span></span></button>`).join('')}</div>`;
+      <span class="order-row-side"><span class="mono">${fcfa(b.total)}</span><span class="pill pill-${pillFor(b.status)}">${esc(t('vv.st.' + b.status))}</span></span></button>`).join('')}</div>`;
   }
 
   // Côté chauffeur : publier un trajet retour et suivre ses réservations.
@@ -2590,14 +2675,18 @@
         </form>`
         : `<button class="btn btn-signal btn-block" type="button" data-act="dtrip-open">${esc(t('vv.publish'))}</button>`}
       ${mine.length ? `<h2 class="app-h">${esc(t('vv.dMine'))}</h2>${mine.map(tr => {
-        const load = store.tripLoad(tr), gross = tr.bookings.filter(b => b.status !== 'cancelled' && !b.other).reduce((a, b) => a + b.total, 0);
+        const paid = tr.bookings.filter(b => ['booked', 'boarded', 'arrived', 'completed'].includes(b.status) && !b.other);
+        const load = store.tripLoad(tr), gross = paid.reduce((a, b) => a + b.total, 0), fees = paid.reduce((a, b) => a + (b.fee || 0), 0);
+        const props = tr.bookings.filter(b => b.status === 'proposed');
         return `<article class="request request-active">
           <div class="request-top"><div><b>${dayLabel(tr.depart)} · ${hm(tr.depart)} → ${hm(store.arrivalTime(tr))}</b><small>${tr.stops.map(id => esc(store.stopOf(id).name)).join(' · ')}</small></div>
             <span class="pill pill-${tr.status === 'scheduled' ? 'open' : 'delivered'}">${esc(t('vv.tl.' + (tr.status === 'scheduled' ? 'booked' : tr.status)))}</span></div>
           <div class="weight-bar" aria-hidden="true"><i style="width:${Math.round(load.units / tr.capacity * 100)}%"></i></div>
-          <p class="hint">${esc(t('vv.dFill', { p: pctStr(load.units / tr.capacity) }))} · ${load.units}/${tr.capacity} · ${load.seats}/${tr.seats} pers. · ${esc(t('vv.dGross', { p: fcfa(gross), n: fcfa(gross - Math.round(gross * TK.COMMISSION_RATE)) }))}</p>
+          <p class="hint">${esc(t('vv.dFill', { p: pctStr(load.units / tr.capacity) }))} · ${load.units}/${tr.capacity} · ${load.seats}/${tr.seats} pers. · ${esc(t('vv.dNet', { p: fcfa(gross), n: fcfa(gross - fees) }))}</p>
+          ${props.length ? `<h3 class="app-h">${esc(t('vv.dProps'))}</h3><ul class="ledger-list">${props.map(b => `<li><span><b>${esc(b.client)}</b><small>${esc(store.stopOf(b.stop).name)} · ${b.units} × ${esc(t('vv.' + b.unitKind))} · ${esc(t('vv.dProp', { p: fcfa(b.unitPrice), q: fcfa(tr.pricePerUnit) }))}</small></span>
+            <span class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="dprop" data-ok="1" data-trip="${tr.id}" data-id="${b.id}">${esc(t('vv.dAccept'))}</button><button class="btn btn-ghost btn-sm" type="button" data-act="dprop" data-ok="0" data-trip="${tr.id}" data-id="${b.id}">${esc(t('vv.dRefuse'))}</button></span></li>`).join('')}</ul>` : ''}
           <h3 class="app-h">${esc(t('vv.dBookings'))}</h3>
-          ${tr.bookings.filter(b => !b.other).length ? `<ul class="ledger-list">${tr.bookings.filter(b => !b.other).map(b => `<li><span><b>${esc(b.client)}</b><small>${esc(store.stopOf(b.stop).name)} · ${hm(store.stopTime(tr, b.stop))} · ${b.units} × ${esc(t('vv.' + b.unitKind))} · ${b.seats} pers. · ${esc(t('vv.dCheck', { c: (b.phone || '').slice(-4) }))}</small></span><span class="mono">${fmt(b.total)}</span></li>`).join('')}</ul>` : `<p class="empty">${esc(t('vv.dNoBook'))}</p>`}
+          ${paid.length ? `<ul class="ledger-list">${paid.map(b => `<li><span><b>${esc(b.client)}${b.channel === 'whatsapp' ? ' · WhatsApp' + (b.depositPaid ? '' : ' · ' + esc(t('vv.depDue', { p: fmt(b.deposit) }))) : ''}</b><small>${esc(store.stopOf(b.stop).name)} · ${hm(store.stopTime(tr, b.stop))} · ${b.units} × ${esc(t('vv.' + b.unitKind))} · ${b.seats} pers. · ${esc(t('vv.dCheck', { c: (b.phone || '').slice(-4) }))}</small></span><span class="mono">${fmt(b.total)}</span></li>`).join('')}</ul>` : `<p class="empty">${esc(t('vv.dNoBook'))}</p>`}
           ${tr.status !== 'done' ? `<button class="btn btn-signal btn-block" type="button" data-act="dtrip-next" data-id="${tr.id}">${esc(t('vv.dNext.' + tr.status))}</button>` : ''}
         </article>`;
       }).join('')}` : ''}
@@ -2622,7 +2711,31 @@
             <td class="mono">${l.units} / ${tr.capacity} (${pctStr(l.units / tr.capacity)})</td><td class="mono">${fmt(tr.pricePerUnit)}</td><td class="mono">${fmt(amt)}</td>
             <td><span class="pill pill-${tr.status === 'scheduled' ? 'open' : 'delivered'}">${esc(t('vv.tl.' + (tr.status === 'scheduled' ? 'booked' : tr.status)))}</span></td></tr>`; }).join('')}</tbody>
       </table></div>` : `<p class="empty">${esc(t('ad.none'))}</p>`}
+      ${agentForm()}
       <p class="hint">${esc(t('vv.example'))}</p>`;
+  }
+
+  // Réservation saisie par un agent (WhatsApp / téléphone), puis confirmation envoyée sur WhatsApp.
+  function agentForm() {
+    const trips = store.tripsState().filter(tr => tr.status === 'scheduled').sort((a, b) => a.depart - b.depart);
+    const g = view.agent || (view.agent = { trip: trips[0] && trips[0].id, stop: 'yamoussoukro', kind: 'sac', units: 6, seats: 1, paid: 'no', name: '', phone: '' });
+    const done = view.agentDone;
+    return `<form class="adm-card" id="agentForm" novalidate>
+      <h2 class="app-h">${esc(t('ag.title'))}</h2><p class="hint">${esc(t('ag.sub'))}</p>
+      ${done ? `<div class="notice notice-ok">${esc(t('ag.done', { n: done.name }))} <a class="btn btn-wa btn-sm" href="${waLink(done.phone, done.msg)}" target="_blank" rel="noopener">${esc(t('ag.confirm'))}</a></div>` : ''}
+      <label class="field"><span>${esc(t('ag.trip'))}</span><select id="ag-trip">${trips.map(tr => { const l = store.tripLoad(tr); return `<option value="${tr.id}"${tr.id === g.trip ? ' selected' : ''}>${dayLabel(tr.depart)} ${hm(tr.depart)} · ${esc(tr.driverName)} · ${tr.capacity - l.units} ${esc(t('vv.sac').toLowerCase())} · ${fmt(tr.pricePerUnit)} FCFA</option>`; }).join('')}</select></label>
+      <div class="row-2">
+        <label class="field"><span>${esc(t('ag.name'))}</span><input id="ag-name" value="${esc(g.name)}"></label>
+        <label class="field"><span>${esc(t('ag.phone'))}</span><span class="phone-in"><b class="mono">+225</b><input id="ag-phone" type="tel" inputmode="numeric" maxlength="14" value="${esc(g.phone)}"></span></label>
+        <label class="field"><span>${esc(t('vv.stop'))}</span><select id="ag-stop">${STOPS().filter(x => x.id !== 'gesco').map(x => `<option value="${x.id}"${x.id === g.stop ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>${esc(t('vv.load'))}</span><select id="ag-kind">${['sac', 'carton', 'cageot'].map(k => `<option value="${k}"${k === g.kind ? ' selected' : ''}>${esc(t('vv.' + k))}</option>`).join('')}</select></label>
+        <label class="field"><span>${esc(t('vv.qty'))}</span><input id="ag-units" type="number" min="1" value="${g.units}"></label>
+        <label class="field"><span>${esc(t('w.passengers'))}</span><select id="ag-seats">${[0, 1, 2].map(n => `<option${n === g.seats ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="field"><span>${esc(t('ag.paid'))}</span><select id="ag-paid"><option value="no"${g.paid === 'no' ? ' selected' : ''}>${esc(t('ag.paidNo'))}</option><option value="orange"${g.paid === 'orange' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Orange Money</option><option value="wave"${g.paid === 'wave' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Wave</option><option value="mtn"${g.paid === 'mtn' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · MTN MoMo</option></select></label>
+      </div>
+      <p class="field-error" id="ag-err" hidden>${esc(t('ag.err'))}</p>
+      <button class="btn btn-signal" type="submit">${esc(t('ag.save'))}</button>
+    </form>`;
   }
 
   // ---------- APPELS MASQUÉS ----------
@@ -2767,7 +2880,13 @@
       case 'home': go('home'); break;
       case 'orders': go('orders'); break;
       case 'vv-count': { const v = vivState(), f = b.dataset.f; v[f] = Math.max(f === 'units' ? 1 : 0, Math.min(f === 'units' ? 200 : 2, v[f] + +b.dataset.d)); render(); break; }
-      case 'vv-pick': vivState().confirm = id; view.vivErr = ''; dgo(); break;
+      case 'vv-pick': vivState().confirm = id; vivState().propFor = null; view.vivErr = ''; if (view.name !== 'home') go('home'); else dgo(); break;
+      case 'vv-prop-open': vivState().propFor = vivState().propFor === id ? null : id; render(); break;
+      case 'vv-paydep': store.payDeposit(b.dataset.trip, id, vivState().pay); ui.toast(t('vv.booked')); break;
+      case 'dprop': store.answerProposal(b.dataset.trip, id, b.dataset.ok === '1'); break;
+      case 'sf-sos': view.sosAsk = true; render(); break;
+      case 'sf-sos-no': view.sosAsk = false; render(); break;
+      case 'sf-sos-yes': view.sosAsk = false; store.sosAlert(b.dataset.trip, id); ui.toast(t('sf.sent')); break;
       case 'vv-back': vivState().confirm = null; dgo(); break;
       case 'vv-book': {
         const v = vivState();
@@ -3031,6 +3150,30 @@
     const f = e.target;
     if (f.id === 'authForm') { submitAuth(); return; }
     if (f.id === 'admGateForm') { submitAdmGate(); return; }
+    if (f.classList.contains('prop-form')) {
+      const v = vivState(), tripId = f.dataset.id;
+      const unitPrice = Math.round(+document.getElementById('vp-' + tripId).value || 0);
+      if (unitPrice < 100) return;
+      const res = store.bookTrip(tripId, { stop: v.stop, unitKind: v.kind, units: v.units, seats: v.seats, lastMile: v.lastMile, payment: v.pay, unitPrice });
+      if (!res.ok) { ui.toast(t('vv.full')); return; }
+      v.propFor = null;
+      go('booking', { bookingId: res.booking.id });
+      return;
+    }
+    if (f.id === 'agentForm') {
+      const g = view.agent, val = id => document.getElementById(id).value;
+      Object.assign(g, { trip: val('ag-trip'), name: val('ag-name').trim(), phone: val('ag-phone').replace(/\D/g, '').replace(/^225(?=\d{10}$)/, ''), stop: val('ag-stop'), kind: val('ag-kind'), units: Math.max(1, +val('ag-units') || 1), seats: +val('ag-seats'), paid: val('ag-paid') });
+      const trip = store.tripsState().find(x => x.id === g.trip);
+      const ok = trip && g.name && PHONE_RE.test(g.phone) && (trip.from === g.stop || trip.stops.includes(g.stop));
+      const res = ok ? store.bookTrip(g.trip, { stop: g.stop, unitKind: g.kind, units: g.units, seats: g.seats, client: g.name, phone: g.phone, channel: 'whatsapp',
+        payment: g.paid === 'no' ? 'cash' : g.paid, status: 'booked', depositPaid: g.paid !== 'no' }) : { ok: false };
+      if (!res.ok) { document.getElementById('ag-err').hidden = false; return; }
+      const bk = res.booking;
+      view.agentDone = { name: g.name, phone: g.phone, msg: t('ag.confirmMsg', { d: trip.driverName, pl: trip.plate, s: store.stopOf(g.stop).name, h: hm(store.stopTime(trip, g.stop)), a: hm(store.arrivalTime(trip)), u: g.units, k: t('vv.' + g.kind).toLowerCase(), p: g.seats, t: fcfa(bk.total), c: g.phone.slice(-4) }) };
+      Object.assign(g, { name: '', phone: '' });
+      render();
+      return;
+    }
     if (f.id === 'dTripForm') {
       const err = document.getElementById('tf-err');
       const depart = new Date(document.getElementById('tf-depart').value).getTime();
@@ -3072,6 +3215,8 @@
         vehicles: Object.fromEntries(VEHICLES.map(v => [v.id, { base: num(`pr-${v.id}-base`), perKm: num(`pr-${v.id}-perKm`), floor: num(`pr-${v.id}-floor`) }])),
         helper: num('pr-helper'), floorFee: num('pr-floor')
       });
+      const wa = document.getElementById('pr-wa').value.replace(/\D/g, '').replace(/^225(?=\d{10}$)/, '');
+      if (!wa || PHONE_RE.test(wa)) store.setSetting('whatsapp', wa);
       ui.toast(t('ad.saved'));
       TKSite.refresh();
       return;
@@ -3206,6 +3351,7 @@
       if (ev.type === 'declined' && currentRole() === 'driver') ui.toast(t('d.declined'));
       if (ev.type === 'approved' && currentRole() === 'driver') ui.toast(t('da.approved'));
       if (ev.type === 'request') requestNotif(ev.order);
+      if (ev.type === 'proposal' && currentRole() === 'client' && ev.booking.phone === store.state.session) ui.toast(t(ev.booking.status === 'accepted' ? 'vv.propAccepted' : 'vv.propRefused'));
     });
     // Comptes à rebours : clôture automatique, renvoi du code SMS ; carte en direct.
     const role = currentRole();
