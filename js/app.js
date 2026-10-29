@@ -1580,7 +1580,6 @@
         ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
         ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
         <button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(net(o)) }))}</button>
-        <p class="hint rf-face">◉ ${esc(t('fs.acceptNote'))}</p>
         <div class="rf-more">
           <button class="link-btn" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
           <button class="link-btn" type="button" data-act="d-decline-open" data-id="${o.id}">${esc(t('dd.decline'))}</button>
@@ -1648,7 +1647,7 @@
         ${proofThumbs(o)}
         <p class="hint">${esc(t(o.status === 'loading' ? 'nv.startNote' : 'd.proofHint2'))}</p>` : ''}
         ${o.status === 'arrived' ? codeForm(o) : ''}
-        ${nextKey ? `<button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-next" data-id="${o.id}">${o.status === 'loading' ? '◉ ' : ''}${esc(t(nextKey))}</button>` : ''}
+        ${nextKey ? `<button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-next" data-id="${o.id}">${['assigned', 'pickup', 'loading'].includes(o.status) ? '◉ ' : ''}${esc(t(nextKey))}</button>` : ''}
         <details class="nav-more"><summary>${esc(t('nv.details'))}</summary>
           <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
           ${clientMedia(o)}
@@ -3019,7 +3018,7 @@
       'dc.four': 'Saisissez les 4 chiffres.', 'dc.ok': 'Livraison validée', 'dc.bad': 'Code incorrect. Il reste {n} essai(s).',
       'fs.start': 'Scanner mon visage', 'fs.redo': 'Visage enregistré · refaire', 'fs.acceptNote': 'Scan rapide du visage pour accepter.',
       'fs.t.online': 'Vérification avant de vous mettre en ligne', 'fs.t.accept': 'Vérification avant d’accepter la course',
-      'fs.t.start': 'Vérification avant le départ', 'fs.t.signup': 'Enregistrement de votre visage',
+      'fs.t.start': 'Vérification avant le départ', 'fs.t.leave': 'Vérification avant de partir au chargement', 'fs.t.load': 'Vérification avant le chargement', 'fs.t.signup': 'Enregistrement de votre visage',
       'fs.cancel': 'Vérification du visage annulée.', 'fs.okOnline': 'Visage vérifié : vous êtes en ligne', 'fs.count': 'Visage vérifié {n} fois pendant cette course',
       'rf.title': 'Nouvelle demande',
       'vc.client': 'Note vocale du client', 'vc.recS': 'Parlez au lieu d’écrire : « 2 cartons, 3 chaises… » · {n} s max',
@@ -3050,7 +3049,7 @@
       'dc.four': 'Enter the 4 digits.', 'dc.ok': 'Delivery validated', 'dc.bad': 'Wrong code. {n} attempt(s) left.',
       'fs.start': 'Scan my face', 'fs.redo': 'Face saved · redo', 'fs.acceptNote': 'Quick face scan to accept.',
       'fs.t.online': 'Check before going online', 'fs.t.accept': 'Check before accepting the trip',
-      'fs.t.start': 'Check before departure', 'fs.t.signup': 'Saving your face',
+      'fs.t.start': 'Check before departure', 'fs.t.leave': 'Check before heading to pickup', 'fs.t.load': 'Check before loading', 'fs.t.signup': 'Saving your face',
       'fs.cancel': 'Face check cancelled.', 'fs.okOnline': 'Face checked: you are online', 'fs.count': 'Face checked {n} time(s) during this trip',
       'rf.title': 'New request',
       'vc.client': 'Customer’s voice note', 'vc.recS': 'Speak instead of typing: “2 boxes, 3 chairs…” · {n} s max',
@@ -3361,24 +3360,23 @@
       case 'd-accept': {
         const o = store.getOrder(id);
         if (store.available() < commission(o.price, o.optionsPrice)) break;
-        // Accepter une course : scan du visage pour confirmer que c'est bien ce chauffeur.
-        faceGate('accept', id).then(ok => {
-          if (!ok) return;
-          const res = store.driverOffer(id, o.price);
-          view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
-          if (res.ok) { view.reqFull = null; ui.toast(t('nt.sent')); }
-          render();
-        });
+        // Accepter reste rapide : le scan du visage se fait au départ vers le chargement.
+        const res = store.driverOffer(id, o.price);
+        view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
+        if (res.ok) { view.reqFull = null; ui.toast(t('nt.sent')); }
+        render();
         break;
       }
       case 'd-counter-open': view.counterFor = view.counterFor === id ? null : id; render(); break;
       case 'd-next': {
         const o = store.getOrder(id);
         if (!o) break;
-        // Démarrer la course : photos du chargement obligatoires, puis scan du visage (même chauffeur qu'au chargement).
-        if (o.status === 'loading') {
-          if (!o.photos.start) { ui.toast(t('nv.needPhotos')); break; }
-          faceGate('start', id).then(ok => { if (ok) store.advance(id); });
+        // Scan du visage au départ vers le chargement, à l'arrivée au chargement et au démarrage de la course
+        // (photos du chargement obligatoires) : c'est bien le même chauffeur du début à la fin.
+        const FACE_STEP = { assigned: 'leave', pickup: 'load', loading: 'start' };
+        if (o.status === 'loading' && !o.photos.start) { ui.toast(t('nv.needPhotos')); break; }
+        if (FACE_STEP[o.status]) {
+          faceGate(FACE_STEP[o.status], id).then(ok => { if (ok) store.advance(id); });
           break;
         }
         store.advance(id);
