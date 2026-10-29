@@ -37,7 +37,7 @@
 
   // 3 besoins : déménagement (meubles compris), marchandises (vivriers, commerce), colis.
   const NEEDS = ['moving', 'vivriers', 'goods', 'parcel'];  // + vivriers : axe Bouaké → Abidjan, réservation au sac
-  const PAYMENTS = ['cash', 'orange', 'wave', 'mtn'];
+  const PAYMENTS = ['cash', 'orange', 'wave', 'mtn', 'djamo'];
   const STATUSES = ['open', 'assigned', 'pickup', 'loading', 'transit', 'arrived', 'delivered'];
 
   const ROAD_FACTOR = 1.35;   // vol d'oiseau → route
@@ -97,11 +97,33 @@
     };
   }
 
+  // Chances qu'un chauffeur accepte le prix proposé. Modèle de règles en attendant les vraies données du pilote :
+  // écart au prix conseillé, heure, distance, offre de véhicules et délai de réservation.
+  const SUPPLY = { tricycle: 6, van1t: 0, truck3t: -6, truck10t: -10 };
+  function acceptChance({ vehicle, km, price, reference, when, at }) {
+    const ratio = price / reference;
+    let pct = 100 / (1 + Math.exp(-(ratio - 0.88) * 12));
+    const h = new Date(at || Date.now()).getHours();
+    if (h >= 21 || h < 5) pct -= 12;
+    else if ((h >= 7 && h < 9) || (h >= 17 && h < 19)) pct -= 5;
+    if (ratio < 1 && km > 25) pct -= 8;
+    if (km < 3) pct -= 4;
+    pct += SUPPLY[vehicle] || 0;
+    if (when === 'later') pct += 5;
+    pct = Math.round(Math.max(3, Math.min(97, pct)));
+    return { pct, level: pct < 30 ? 'low' : pct < 60 ? 'mid' : pct < 85 ? 'good' : 'high' };
+  }
+  // Plus petit prix qui donne une « bonne » chance (60 % et plus).
+  function goodPrice(args) {
+    for (let p = roundUp100(args.minimum); p <= args.reference * 1.6; p += 100) if (acceptChance(Object.assign({}, args, { price: p })).pct >= 60) return p;
+    return roundUp100(args.reference * 1.2);
+  }
+
   // Commission prélevée sur la part transport seulement : les options (aides, étages) reviennent entièrement au chauffeur.
   const commission = (price, options = 0) => Math.round(Math.max(0, price - options) * COMMISSION_RATE);
 
   window.TK = Object.assign(window.TK || {}, {
     COMMISSION_RATE, VEHICLES, OPTIONS, COMMUNES, NEEDS, PAYMENTS, STATUSES,
-    commune, vehicle, distanceKm, nearestCommune, quote, optionsTotal, commission, roundUp100
+    commune, vehicle, distanceKm, nearestCommune, quote, optionsTotal, commission, roundUp100, acceptChance, goodPrice
   });
 })();

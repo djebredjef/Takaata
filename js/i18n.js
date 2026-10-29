@@ -41,7 +41,7 @@
     'rules.r2t': 'Attente', 'rules.r2': '30 minutes cumulées de chargement et déchargement incluses. Les embouteillages ne sont pas facturés comme attente.',
     'rules.r3t': 'Annulation', 'rules.r3': "Gratuite avant attribution, et pendant 5 minutes après si le chauffeur n'est pas parti. Une annulation due au chauffeur reste gratuite pour vous.",
     'rules.r4t': 'Photos et litiges', 'rules.r4': "Photos au départ et à l'arrivée, réserves enregistrées, signalement dans l'app. Le support prend le dossier en charge sous un jour ouvré.",
-    'rules.r5t': 'Paiement', 'rules.r5': 'Espèces au chauffeur, ou Mobile Money : Orange Money, Wave, MTN MoMo.',
+    'rules.r5t': 'Paiement', 'rules.r5': 'Espèces au chauffeur, ou Mobile Money : Orange Money, Wave, MTN MoMo, Djamo.',
     'rules.r6t': 'Changements', 'rules.r6': "Nouvelle adresse ou volume en plus : un nouveau prix est accepté dans l'app avant exécution. Péages et stationnement remboursés sur justificatif.",
 
     'drv.eyebrow': 'Chauffeurs partenaires', 'drv.title': 'Gardez 85 % de chaque course.',
@@ -70,7 +70,7 @@
 
     'faq.title': 'Questions fréquentes',
     'faq.q1': 'Comment le prix est-il fixé ?', 'faq.a1': "L'app calcule un prix de référence selon le véhicule, la distance et vos options. Vous proposez votre prix, au-dessus du plancher. Les chauffeurs l'acceptent ou font une contre-offre, et vous choisissez.",
-    'faq.q2': 'Comment payer ?', 'faq.a2': 'En espèces au chauffeur, ou par Mobile Money (Orange Money, Wave, MTN MoMo), selon les moyens disponibles au lancement.',
+    'faq.q2': 'Comment payer ?', 'faq.a2': 'En espèces au chauffeur, ou par Mobile Money (Orange Money, Wave, MTN MoMo, Djamo), selon les moyens disponibles au lancement.',
     'faq.q3': 'Mes biens sont-ils assurés ?', 'faq.a3': "Chaque course est documentée par des photos au départ et à l'arrivée et une preuve de livraison. En cas de dommage, le support traite le dossier selon les responsabilités établies. Aucune assurance tous risques n'est annoncée tant qu'un assureur ne l'a pas confirmée par écrit.",
     'faq.q4': 'Les chauffeurs sont-ils vérifiés ?', 'faq.a4': "Oui : pièce d'identité et véhicule sont contrôlés à l'inscription. Chaque course est notée par le client.",
     'faq.q5': 'Faut-il télécharger une application ?', 'faq.a5': "Non. Takaata s'ouvre dans le navigateur et s'installe sur l'écran d'accueil de votre téléphone, comme une application.",
@@ -85,7 +85,7 @@
     // ---- Application ----
     'app.site': 'Site', 'role.client': 'Client', 'role.driver': 'Chauffeur', 'role.admin': 'Admin',
     'app.demo': 'Prototype : les données restent sur cet appareil.',
-    'pay.cash': 'Espèces', 'pay.orange': 'Orange Money', 'pay.wave': 'Wave', 'pay.mtn': 'MTN MoMo',
+    'pay.cash': 'Espèces', 'pay.orange': 'Orange Money', 'pay.wave': 'Wave', 'pay.mtn': 'MTN MoMo', 'pay.djamo': 'Djamo',
     'status.open': "En attente d'offres", 'status.assigned': 'Chauffeur attribué', 'status.pickup': 'En route vers le chargement',
     'status.loading': 'Chargement', 'status.transit': 'En livraison', 'status.arrived': 'Arrivé à destination',
     'status.delivered': 'Livrée', 'status.cancelled': 'Annulée',
@@ -211,7 +211,7 @@
     'rules.r2t': 'Waiting time', 'rules.r2': '30 minutes of loading and unloading included in total. Traffic jams are not charged as waiting time.',
     'rules.r3t': 'Cancellation', 'rules.r3': "Free before a driver is assigned, and for 5 minutes after if the driver hasn't set off. A cancellation caused by the driver is always free for you.",
     'rules.r4t': 'Photos and disputes', 'rules.r4': 'Photos at pickup and drop-off, reservations recorded, in-app reporting. Support takes up the case within one business day.',
-    'rules.r5t': 'Payment', 'rules.r5': 'Cash to the driver, or Mobile Money: Orange Money, Wave, MTN MoMo.',
+    'rules.r5t': 'Payment', 'rules.r5': 'Cash to the driver, or Mobile Money: Orange Money, Wave, MTN MoMo, Djamo.',
     'rules.r6t': 'Changes', 'rules.r6': 'New address or extra volume: a new price is agreed in the app first. Tolls and parking refunded on receipt.',
 
     'drv.eyebrow': 'Partner drivers', 'drv.title': 'Keep 85% of every trip.',
@@ -240,7 +240,7 @@
 
     'faq.title': 'Frequently asked questions',
     'faq.q1': 'How is the price set?', 'faq.a1': 'The app calculates a reference price from the vehicle, distance and your options. You propose your price, above the minimum. Drivers accept it or counter, and you choose.',
-    'faq.q2': 'How do I pay?', 'faq.a2': 'In cash to the driver, or by Mobile Money (Orange Money, Wave, MTN MoMo), depending on what is available at launch.',
+    'faq.q2': 'How do I pay?', 'faq.a2': 'In cash to the driver, or by Mobile Money (Orange Money, Wave, MTN MoMo, Djamo), depending on what is available at launch.',
     'faq.q3': 'Are my goods insured?', 'faq.a3': 'Every trip is documented with photos at pickup and drop-off and a proof of delivery. If something is damaged, support handles the case based on established responsibility. No all-risk insurance is announced until an insurer confirms it in writing.',
     'faq.q4': 'Are drivers verified?', 'faq.a4': 'Yes: ID and vehicle are checked at sign-up. Every trip is rated by the customer.',
     'faq.q5': 'Do I need to download an app?', 'faq.a5': "No. Takaata opens in your browser and installs on your phone's home screen like an app.",
@@ -254,7 +254,7 @@
 
     'app.site': 'Website', 'role.client': 'Customer', 'role.driver': 'Driver', 'role.admin': 'Admin',
     'app.demo': 'Prototype: data stays on this device.',
-    'pay.cash': 'Cash', 'pay.orange': 'Orange Money', 'pay.wave': 'Wave', 'pay.mtn': 'MTN MoMo',
+    'pay.cash': 'Cash', 'pay.orange': 'Orange Money', 'pay.wave': 'Wave', 'pay.mtn': 'MTN MoMo', 'pay.djamo': 'Djamo',
     'status.open': 'Waiting for offers', 'status.assigned': 'Driver assigned', 'status.pickup': 'Heading to pickup',
     'status.loading': 'Loading', 'status.transit': 'On the way', 'status.arrived': 'Arrived at destination',
     'status.delivered': 'Delivered', 'status.cancelled': 'Cancelled',

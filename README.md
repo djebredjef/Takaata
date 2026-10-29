@@ -6,15 +6,15 @@ Site web et application (PWA installable) de **Takaata**, plateforme de transpor
 
 - **Site vitrine** (`index.html`) : présentation, estimateur de prix, grille des véhicules, règles, chauffeurs, entreprises, FAQ. Bilingue FR / EN.
 - **Application** (même page, routes `#app`, `#chauffeur`, `#admin`) :
-  - **Client** : commande en 4 étapes (trajet, véhicule illustré avec ce qu'il peut contenir, chargement, prix et paiement), offres et contre-offres des chauffeurs, suivi, photos, signalement, confirmation de livraison, note et reçu.
-  - **Chauffeur** : solde prépayé (solde, réservé, disponible), recharges, demandes à proximité, accepter ou contre-proposer, réservation de 15 % avant attribution, débit unique à la livraison (espèces) ou reversement net (Mobile Money).
+  - **Client** : commande en 4 étapes (trajet, véhicule illustré avec ce qu'il peut contenir, chargement, prix et paiement), photos des objets et note vocale, jauge des chances d'acceptation du prix, nouvelles propositions après contre-offre, suivi, code de livraison à 4 chiffres, signalement, note et reçu.
+  - **Chauffeur** : solde prépayé (solde, réservé, disponible), recharges, demandes à proximité, accepter ou contre-proposer, réservation de 15 % avant attribution, demande en plein écran, scan du visage (inscription, mise en ligne, acceptation, départ), navigation, photos prises en direct, saisie du code du client pour valider la livraison et être payé.
   - **Admin** : indicateurs, liste des courses, rapprochement du solde chauffeur, signalements.
 
 Les règles viennent du business plan V3 : prix = max(plancher ; base + km × tarif) + options, commission 15 %, annulation gratuite avant attribution et pendant 5 minutes.
 
 ## Prototype
 
-Les données sont stockées dans le navigateur (`localStorage`) et les chauffeurs et clients sont simulés. Prochaine étape : un backend Firebase (comptes par téléphone + OTP, Firestore, notifications), Google Maps et CinetPay pour le Mobile Money.
+Les données sont stockées dans le navigateur (`localStorage`) et les chauffeurs et clients sont simulés. Prochaine étape : un backend Firebase (comptes par téléphone + OTP, Firestore, notifications), Google Maps et CinetPay pour le Mobile Money. La reconnaissance faciale est simulée : au lancement, un fournisseur spécialisé (par exemple Smile ID) comparera les visages.
 
 ## Lancer en local
 
@@ -37,6 +37,7 @@ js/data.js            véhicules, communes, calcul des prix
 js/i18n.js            traductions FR / EN
 js/store.js           commandes, offres, solde prépayé (logique métier)
 js/ui.js              utilitaires d'affichage, carte schématique
+js/media.js           appareil photo, scan du visage (simulé), note vocale
 js/vehicles.js        choix du véhicule : caisse chargée, cotes, « Que peut-on charger ? »
 js/site.js            site vitrine
 js/app.js             application client / chauffeur / admin

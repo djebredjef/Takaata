@@ -15,10 +15,7 @@
   ];
 
   // Délais de la simulation (ms)
-  const SIM = { offers: [2500, 5500, 9000, 13000], steps: [7000, 15000, 25000, 35000], decision: 3500, autoConfirm: 4000 };
-  // Sans réponse du client après l'arrivée, la course est clôturée sur la preuve du chauffeur.
-  // Prototype : 60 s pour la démonstration (valeur réelle à fixer, par ex. 2 h).
-  const AUTO_CLOSE_MS = 60 * 1000;
+  const SIM = { offers: [2500, 5500, 9000, 13000], steps: [7000, 15000, 25000, 35000], decision: 3500 };
   const FREE_CANCEL_MS = 5 * 60 * 1000;
 
   let state;
@@ -71,8 +68,14 @@
     if (!state.seeded) seed();
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* stockage indisponible */ }
+    try { saveRaw(); } catch (e) {
+      // Stockage plein (photos, notes vocales) : on retire les médias des courses terminées les plus anciennes.
+      const old = state.orders.filter(o => ['delivered', 'cancelled'].includes(o.status) && (o.voice || o.itemPhotos || o.proofs)).reverse();
+      for (const o of old) { delete o.voice; delete o.itemPhotos; delete o.proofs; try { saveRaw(); return; } catch (err) { /* continuer */ } }
+      // Sinon : stockage indisponible (navigation privée), l'app continue en mémoire.
+    }
   }
+  function saveRaw() { localStorage.setItem(KEY, JSON.stringify(state)); }
   function emit() { save(); listeners.forEach(fn => fn()); }
 
   // Demandes d'autres clients, visibles dans l'espace chauffeur.
@@ -130,17 +133,19 @@
     return o;
   }
 
-  function planOffers(o) {
-    const r = rng(o.id);
-    const pool = DRIVER_POOL.slice().sort(() => r() - 0.5).slice(0, SIM.offers.length);
+  function planOffers(o, base = o.createdAt) {
+    const round = o.rounds || 1;
+    const r = rng(o.id + ':' + round);
+    // Même modèle que la jauge du client : moins de chances = moins de chauffeurs intéressés, et surtout des contre-offres.
+    const ch = TK.acceptChance({ vehicle: o.vehicle, km: o.km, price: o.price, reference: o.reference, when: o.when, at: base });
+    const n = ch.pct < 15 ? 1 : ch.pct < 40 ? 2 : ch.pct < 70 ? 3 : 4;
+    const pool = DRIVER_POOL.slice().sort(() => r() - 0.5).slice(0, n);
     return pool.map((d, i) => {
-      // Plus le prix proposé est haut par rapport à la référence, plus les chauffeurs acceptent tel quel.
-      const generosity = o.price / o.reference;
-      const accepts = r() < Math.min(0.85, 0.25 + (generosity - 0.9) * 1.5);
+      const accepts = r() < ch.pct / 100 * 0.9;
       const counter = roundUp100(Math.max(o.minimum, o.price * (1.05 + r() * 0.2), o.reference * (0.97 + r() * 0.12)));
       const price = accepts ? o.price : Math.max(counter, o.price + 100);
       return {
-        id: `${o.id}-${i}`, at: o.createdAt + SIM.offers[i], name: d.name, rating: d.rating, trips: d.trips,
+        id: `${o.id}-${round}-${i}`, at: base + SIM.offers[i], name: d.name, rating: d.rating, trips: d.trips,
         plate: plateFor(r), phone: phoneFor(r), eta: 4 + Math.floor(r() * 18), price, kind: price === o.price ? 'accept' : 'counter'
       };
     });
@@ -155,6 +160,27 @@
   }
 
   const getOrder = id => state.orders.find(o => o.id === id);
+
+  // Nouvelle proposition du client (autant de fois qu'il veut) : les acceptations au prix précédent expirent,
+  // les contre-offres au moins égales au nouveau prix restent valables, et la demande repart vers les chauffeurs.
+  function repropose(orderId, price) {
+    const o = getOrder(orderId);
+    if (!o || o.status !== 'open') return { ok: false };
+    price = Math.max(o.minimum, Math.round(price));
+    if (price === o.price) return { ok: false, same: true };
+    const now = Date.now();
+    for (const of of visibleOffers(o, now)) if (of.kind === 'accept' || of.price < price) of.declined = true;
+    o.plannedOffers = o.plannedOffers.filter(p => p.at <= now);
+    const mine = o.offers.find(of => of.me && of.declined);
+    if (mine && drv() && drv().holds[o.id] != null) release(o.id);
+    o.rounds = (o.rounds || 1) + 1;
+    track('reproposed', o, { price, previous: o.price, round: o.rounds });
+    o.price = price;
+    if (o.owner === 'me') o.plannedOffers = o.plannedOffers.concat(planOffers(o, now));
+    o.seenOffers = o.plannedOffers.filter(p => p.at <= now).length;
+    emit();
+    return { ok: true };
+  }
 
   function visibleOffers(o, now = Date.now()) {
     const planned = o.plannedOffers.filter(p => p.at <= now);
@@ -226,6 +252,9 @@
     o.price = offer.price;
     o.commission = commission(offer.price, o.optionsPrice);
     o.status = 'assigned';
+    // Code de livraison à 4 chiffres : le client le donne au chauffeur à l'arrivée, ce qui clôture la course et libère le paiement.
+    o.deliveryCode = String(1000 + Math.floor(Math.random() * 9000));
+    o.codeTries = 0;
     track('assigned', o, { driver: who(offer), kind: offer.kind, price: offer.price, asked: o.price, reference: o.reference, delayMs: Date.now() - o.createdAt });
     o.timeline.assigned = Date.now();
     o.sim = !offer.me;
@@ -247,7 +276,6 @@
     // Le chauffeur simulé documente le chargement et la livraison par photos.
     if (o.sim && o.status === 'loading') o.photos.start = Math.max(o.photos.start, 2);
     if (o.sim && o.status === 'arrived') o.photos.end = Math.max(o.photos.end, 2);
-    if (o.status === 'arrived') o.autoConfirmAt = Date.now() + (o.owner === 'other' ? SIM.autoConfirm : AUTO_CLOSE_MS);
     emit();
   }
 
@@ -259,7 +287,6 @@
     o.status = 'delivered';
     o.closedBy = by;
     track('delivered', o, { driver: o.driver && who(o.driver), price: o.price, by, durationMs: Date.now() - (o.timeline.assigned || o.createdAt) });
-    delete o.autoConfirmAt;
     o.timeline.delivered = Date.now();
     // Le chauffeur note aussi le client (simulé : 5 étoiles).
     const u = user();
@@ -282,6 +309,36 @@
         ledger('payout', net, { orderId: o.id, channel: o.payment });
       }
     }
+    emit();
+  }
+
+  // Le chauffeur saisit le code du client. 5 essais, puis le support prend le relais.
+  const CODE_TRIES = 5;
+  function submitDeliveryCode(orderId, codeIn) {
+    const o = getOrder(orderId);
+    if (!o || o.status !== 'arrived') return { ok: false };
+    if (o.codeTries >= CODE_TRIES) return { ok: false, locked: true };
+    if (String(codeIn).trim() !== o.deliveryCode) {
+      o.codeTries = (o.codeTries || 0) + 1;
+      track('code_failed', o, { tries: o.codeTries });
+      if (o.codeTries >= CODE_TRIES) { o.disputed = true; state.reports.unshift({ at: Date.now(), orderId: o.id, text: 'Code de livraison : 5 essais incorrects.', phone: o.clientPhone, urgent: true }); }
+      emit();
+      return { ok: false, left: CODE_TRIES - o.codeTries };
+    }
+    confirmDelivery(o.id, 'code');
+    return { ok: true };
+  }
+
+  // Vérifications du visage du chauffeur (en ligne, acceptation, départ) : gardées comme preuve.
+  function faceCheck(step, orderId, image) {
+    const d = drv();
+    if (!d) return;
+    const entry = { at: Date.now(), step, orderId: orderId || null, ok: true };
+    d.faceChecks = [entry].concat(d.faceChecks || []).slice(0, 50);
+    if (image && step === 'online') d.lastFace = image;
+    const o = orderId && getOrder(orderId);
+    if (o) o.faceChecks = (o.faceChecks || []).concat(entry);
+    track('face_check', o || null, { driver: d.phone, step });
     emit();
   }
 
@@ -322,13 +379,16 @@
     const o = getOrder(orderId);
     if (!o || o.status !== 'arrived') return;
     o.disputed = true;
-    delete o.autoConfirmAt;
   }
 
-  function addPhotos(orderId, which, count) {
+  // Preuves photo du chauffeur (prises en direct) : nombre + miniatures.
+  function addPhotos(orderId, which, images) {
     const o = getOrder(orderId);
     if (!o) return;
-    o.photos[which] += count;
+    const list = Array.isArray(images) ? images : [];
+    o.photos[which] += list.length || +images || 0;
+    o.proofs = o.proofs || { start: [], end: [] };
+    o.proofs[which] = o.proofs[which].concat(list).slice(0, 8);
     emit();
   }
 
@@ -387,11 +447,6 @@
         for (const s of TK.STATUSES) {
           if (due.includes(s) && NEXT[o.status] === s) { advance(o.id); changed = true; }
         }
-      }
-      if (o.autoConfirmAt && now >= o.autoConfirmAt) {
-        delete o.autoConfirmAt;
-        confirmDelivery(o.id, o.owner === 'other' ? 'client' : 'auto');
-        changed = true;
       }
     }
     for (const trip of state.trips || []) {
@@ -755,12 +810,12 @@
       get state() { return state; },
       subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
-      advance, confirmDelivery, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
+      advance, confirmDelivery, repropose, submitDeliveryCode, faceCheck, CODE_TRIES, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,
       driverDecline, setOnline, onlineMsSince, seedAnalytics, clearDemoAnalytics,
       setPricing, resetPricing, suspendDriver, resolveReport, adminCancel, DEFAULT_PRICING,
       driver: drv, driverAccount, driverRegister, driverLogin, driverLogout, reviewDriver, driverRating,
-      held, available, NEXT, AUTO_CLOSE_MS, canCall,
+      held, available, NEXT, canCall,
       adminState, setOwnerHash, addStaff, removeStaff, touchStaff, DRIVER_POOL,
       answerProposal, payDeposit, sosAlert, setSetting,
       CORRIDOR, stopOf, stopTime, arrivalTime, tripLoad, tripsState, publishTrip, quoteBooking, bookTrip, cancelBooking, advanceTrip, myBookings, seedTrips,

@@ -226,11 +226,19 @@
 
         <section class="items-pick">
           <h2 class="app-h">${esc(t('w.items'))} <small>${esc(t('w.optional'))}</small></h2>
+          <div class="seg" role="tablist" aria-label="${esc(t('w.items'))}">
+            <button type="button" role="tab" class="seg-btn${view.itemsTab !== 'photos' ? ' is-on' : ''}" aria-selected="${view.itemsTab !== 'photos'}" data-act="items-tab" data-t="list">${esc(t('ph.list'))}</button>
+            <button type="button" role="tab" class="seg-btn${view.itemsTab === 'photos' ? ' is-on' : ''}" aria-selected="${view.itemsTab === 'photos'}" data-act="items-tab" data-t="photos">📷 ${esc(t('ph.tab'))}${(d.itemPhotos || []).length ? ` · ${d.itemPhotos.length}` : ''}</button>
+          </div>
+          ${view.itemsTab === 'photos' ? itemPhotosPanel(d) : `
           <ul class="pick-grid">${keys.map(pick).join('')}</ul>
           ${rest.length ? (view.moreItems
             ? `<ul class="pick-grid">${rest.map(pick).join('')}</ul>`
-            : `<button type="button" class="link-btn" data-act="more-items">+ ${esc(t('w.moreItems'))}</button>`) : ''}
-          <label class="field"><span>${esc(t('w.notes'))}</span><textarea id="w-notes" rows="2" data-bind="notes" placeholder="${esc(t('w.itemsPh'))}">${esc(d.notes)}</textarea></label>
+            : `<button type="button" class="link-btn" data-act="more-items">+ ${esc(t('w.moreItems'))}</button>`) : ''}`}
+          <div class="msg-box">
+            <label class="field"><span>${esc(t('w.notes'))}</span><textarea id="w-notes" rows="2" data-bind="notes" placeholder="${esc(t('w.itemsPh'))}">${esc(d.notes)}</textarea></label>
+            ${voiceBlock(d)}
+          </div>
         </section>
 
         <div class="weight-box${over ? ' is-over' : ''}">
@@ -251,37 +259,34 @@
     if (step === 4) {
       if (d.price == null || d.price < q.minimum) d.price = q.reference;
       const kg = loadKg(d);
+      const meta = [t('veh.' + d.vehicle), t(d.service === 'handling' ? 'svc.handling' : 'svc.transport') + (d.service === 'handling' ? ` (${d.helpers})` : ''),
+        kg ? `≈ ${fmt(kg)} kg` : '', t(+d.passengers ? 'w.passN' : 'w.pass0', { n: +d.passengers })].filter(Boolean);
       body = `
-        <article class="ticket" aria-label="${esc(t('tk.title'))}">
+        <article class="ticket ticket-sm" aria-label="${esc(t('tk.title'))}">
           <div class="ticket-band"><span class="brand-name">takaata</span><span class="mono">${esc(t('tk.title'))}</span></div>
           <div class="ticket-main">
             <div class="ticket-route">
-              <div><small>${esc(t('quote.from'))}</small><b class="ticket-code">${code(d.from)}</b><span>${esc(commune(d.from).name)}</span></div>
+              <div><b class="ticket-code">${code(d.from)}</b><span>${esc(commune(d.from).name)}</span></div>
               <div class="ticket-line" aria-hidden="true"><i></i><span class="mono">${ui.km(kmVal)}</span></div>
-              <div class="ta-r"><small>${esc(t('quote.to'))}</small><b class="ticket-code">${code(d.to)}</b><span>${esc(commune(d.to).name)}</span></div>
+              <div class="ta-r"><b class="ticket-code">${code(d.to)}</b><span>${esc(commune(d.to).name)}</span></div>
             </div>
-            <dl class="ticket-meta">
-              <div><dt>${esc(t('quote.vehicle'))}</dt><dd>${esc(t('veh.' + d.vehicle))}</dd></div>
-              <div><dt>${esc(t('w.service'))}</dt><dd>${esc(t(d.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${d.service === 'handling' ? ` · ${d.helpers}` : ''}</dd></div>
-              <div><dt>${esc(t('w.weight'))}</dt><dd class="mono">${kg ? `≈ ${fmt(kg)} kg` : '—'}</dd></div>
-              <div><dt>${esc(t('w.passengers'))}</dt><dd>${esc(t(+d.passengers ? 'w.passN' : 'w.pass0', { n: +d.passengers }))}</dd></div>
-            </dl>
+            <p class="tk-meta">${meta.map(esc).join(' · ')}</p>
           </div>
           <div class="ticket-tear" aria-hidden="true"></div>
-          <dl class="ticket-prices">
-            <div><dt>${esc(t('w.transport'))}</dt><dd class="mono">${fcfa(q.transport)}</dd></div>
-            <div><dt>${esc(t('w.options'))}</dt><dd class="mono">${fcfa(q.options)}</dd></div>
-            <div class="total"><dt>${esc(t('w.reference'))}</dt><dd class="mono">${fcfa(q.reference)}</dd></div>
+          <dl class="tk-prices">
+            <div><dt>${esc(t('w.reference'))}</dt><dd class="mono">${fcfa(q.reference)}</dd>
+              <small>${esc(t('w.transport'))} ${fmt(q.transport)}${q.options ? ` + ${esc(t('w.options').toLowerCase())} ${fmt(q.options)}` : ''}</small></div>
             <div class="min"><dt>${esc(t('w.minimum'))}</dt><dd class="mono">${fcfa(q.minimum)}</dd></div>
           </dl>
         </article>
-        <div class="price-box">
-          <span class="label">${esc(t('w.yourPrice'))}</span>
+        <div class="price-box price-box-sm">
+          <span class="label">${esc(t('w.proposeT'))}</span>
           <div class="stepper">
             <button type="button" class="step-btn" data-act="price" data-d="-500" aria-label="−500"${d.price - 500 < q.minimum ? ' disabled' : ''}>−</button>
             <label class="price-input"><input id="w-price" type="number" inputmode="numeric" step="100" min="${q.minimum}" value="${d.price}" data-bind="price"><span>FCFA</span></label>
             <button type="button" class="step-btn" data-act="price" data-d="500" aria-label="+500">+</button>
           </div>
+          ${chanceMeter(draftChanceArgs(d, q, kmVal))}
           <p class="hint">${esc(t('w.negotiate', { min: fcfa(q.minimum) }))}</p>
           <p class="field-error" id="w-price-err" hidden>${esc(t('w.belowMin', { min: fcfa(q.minimum) }))}</p>
         </div>
@@ -310,6 +315,87 @@
           </div>
         </form>
       </section>`;
+  }
+
+  // Photos des objets (appareil photo ou galerie côté client) : le chauffeur voit le chargement avant d'accepter.
+  const ITEM_PHOTOS_MAX = 8;
+  function itemPhotosPanel(d) {
+    const ph = d.itemPhotos || [];
+    return `<div class="ph-panel">
+      ${ph.length < ITEM_PHOTOS_MAX ? `<label class="photo-add"><input type="file" accept="image/*" multiple id="w-itemPhotos">
+        <span>＋ ${esc(t('ph.add'))}</span><small>${esc(t('ph.addS', { n: ITEM_PHOTOS_MAX }))}</small></label>` : ''}
+      ${ph.length ? `<div class="thumbs">${ph.map((src, i) => `<span class="thumb"><img src="${src}" alt="${esc(t('ph.n', { n: i + 1 }))}"><button type="button" data-act="item-ph-del" data-i="${i}" aria-label="${esc(t('md.retake'))} ${i + 1}">✕</button></span>`).join('')}</div>` : ''}
+      <p class="hint">${esc(t('ph.why'))}</p>
+    </div>`;
+  }
+  // Note vocale pour décrire le chargement sans écrire.
+  let voiceCtl = null;
+  function voiceBlock(d) {
+    if (d.voice) return `<div class="voice-ok"><span>🎤 ${esc(t('vc.rec'))} · <span class="mono">${mmss(d.voice.sec * 1000)}</span></span>
+      <audio controls src="${d.voice.url}"></audio><button type="button" class="link-btn danger" data-act="voice-del">${esc(t('md.retake'))}</button></div>`;
+    return `<button type="button" class="voice-btn${voiceCtl ? ' is-rec' : ''}" id="voiceBtn" data-act="voice-rec"><span class="mic" aria-hidden="true"></span>
+      <span><b>${esc(voiceCtl ? '■ ' + t('vc.stop') : t('vc.rec'))}</b><small>${esc(t('vc.recS', { n: TK.media.VOICE_MAX_S }))}</small></span></button>`;
+  }
+  async function toggleVoice() {
+    const btn = document.getElementById('voiceBtn');
+    if (voiceCtl) {
+      const ctl = voiceCtl; voiceCtl = null;
+      const res = await ctl.stop();
+      if (view.draft) view.draft.voice = res;
+      render();
+      return;
+    }
+    const ctl = await TK.media.voice(sec => {
+      const b = document.getElementById('voiceBtn');
+      if (b) b.querySelector('small').textContent = `${mmss(sec * 1000)} / ${mmss(TK.media.VOICE_MAX_S * 1000)}`;
+      if (sec >= TK.media.VOICE_MAX_S && voiceCtl) toggleVoice();
+    });
+    if (!ctl) { ui.toast(t('vc.noMic')); return; }
+    voiceCtl = ctl;
+    if (btn) { btn.classList.add('is-rec'); btn.querySelector('b').textContent = '■ ' + t('vc.stop'); }
+  }
+
+  // Jauge « chances d'acceptation » : en mots et en couleurs plutôt qu'en pourcentage (lisible par tous).
+  function draftChanceArgs(d, q, kmVal) {
+    return { vehicle: d.vehicle, km: kmVal, price: d.price, reference: q.reference, minimum: q.minimum, when: d.when,
+      at: d.when === 'later' && d.whenAt ? new Date(d.whenAt).getTime() : Date.now() };
+  }
+  function chanceMeter(args) {
+    const c = TK.acceptChance(args);
+    const lv = ['low', 'mid', 'good', 'high'].indexOf(c.level);
+    const tip = c.pct < 60 ? t('ch.tip', { p: fcfa(TK.goodPrice(args)) }) : '';
+    return `<div class="chance is-${c.level}" role="status" aria-live="polite">
+      <div class="chance-top"><span>${esc(t('ch.label'))}</span><b>${esc(t('ch.' + c.level))}</b></div>
+      <div class="chance-bar" aria-hidden="true">${[0, 1, 2, 3].map(i => `<i${i <= lv ? ' class="on"' : ''}></i>`).join('')}</div>
+      <p>${esc(t('ch.' + c.level + 'S'))}${tip ? ' ' + esc(tip) : ''}</p></div>`;
+  }
+  // Nouvelle proposition du client après des contre-offres : possible autant de fois que nécessaire.
+  function orderChanceArgs(o, price) {
+    return { vehicle: o.vehicle, km: o.km, price, reference: o.reference, minimum: o.minimum, when: o.when, at: Date.now() };
+  }
+  function repropBlock(o, offers) {
+    if (!view.repropOpen) return `<button class="btn btn-ghost btn-block" type="button" data-act="reprop-open">${esc(t(offers.length ? 'rp.openCounter' : 'rp.open'))}</button>`;
+    const counters = offers.filter(of => of.kind === 'counter').map(of => of.price);
+    const def = view.repropPrice || (counters.length ? Math.max(o.minimum, TK.roundUp100((o.price + Math.min(...counters)) / 2)) : TK.roundUp100(o.price * 1.1));
+    return `<form class="reprop" id="repropForm" data-id="${o.id}" novalidate>
+      <span class="label">${esc(t('rp.title'))}</span>
+      <div class="stepper">
+        <button type="button" class="step-btn" data-act="rp-step" data-d="-500" aria-label="−500">−</button>
+        <label class="price-input"><input id="o-newprice" type="number" inputmode="numeric" step="100" min="${o.minimum}" value="${def}"><span>FCFA</span></label>
+        <button type="button" class="step-btn" data-act="rp-step" data-d="500" aria-label="+500">+</button>
+      </div>
+      ${chanceMeter(orderChanceArgs(o, def))}
+      <p class="hint">${esc(t('rp.note', { min: fcfa(o.minimum) }))}</p>
+      <div class="btn-row"><button class="btn btn-signal" type="submit">${esc(t('rp.send'))}</button>
+        <button class="btn btn-ghost" type="button" data-act="reprop-close">${esc(t('a.resetNo'))}</button></div>
+    </form>`;
+  }
+
+  // Mise à jour de la jauge pendant la saisie du prix, sans redessiner l'écran.
+  function refreshChance(input, args) {
+    const box = input.closest('.price-box, .reprop');
+    const el = box && box.querySelector('.chance');
+    if (el && args.price >= 0) el.outerHTML = chanceMeter(args);
   }
 
   function counter(field, label, value, min, max) {
@@ -347,6 +433,7 @@
               <button class="btn btn-signal btn-sm" type="button" data-act="choose" data-id="${of.id}">${esc(t('o.choose'))}</button>
             </div>
           </article>`).join('')}</div>
+        ${repropBlock(o, offers)}
         ${cancelBlock(o)}`;
     } else if (o.status === 'cancelled') {
       main = `<p class="notice">${esc(o.cancelFree ? t('o.cancelFree') : t('o.cancelFee'))}</p>`;
@@ -366,6 +453,7 @@
         </article>
         ${callBlock(o, 'client')}
         ${['assigned', 'pickup'].includes(o.status) && o.clientPhone ? `<div class="code-box"><span>${esc(t('cv.clientCodeT'))}</span><b class="mono">${esc(o.clientPhone.slice(-4))}</b><small>${esc(t('cv.clientCodeS'))}</small></div>` : ''}
+        ${o.deliveryCode && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status) ? `<div class="code-box code-box-dl"><span>${esc(t('dc.title'))}</span><b class="mono">${esc(o.deliveryCode)}</b><small>${esc(t(o.status === 'arrived' ? 'dc.nowS' : 'dc.s'))}</small></div>` : ''}
 
         <ol class="timeline">${steps.map((s, i) => `
           <li class="${i < idx || o.status === 'delivered' ? 'is-done' : i === idx ? 'is-now' : ''}">
@@ -377,14 +465,14 @@
           <div><dt>${esc(t('w.payment'))}</dt><dd>${esc(t('pay.' + o.payment))}</dd></div>
         </dl>
 
-        ${o.photos.start || o.photos.end ? `<p class="hint">${esc(t('dl.proofs', { a: o.photos.start, b: o.photos.end }))}</p>` : ''}
+        ${o.photos.start || o.photos.end ? `<p class="hint">${esc(t('dl.proofs', { a: o.photos.start, b: o.photos.end }))}</p>${proofThumbs(o)}` : ''}
 
         ${o.status === 'arrived' ? `
           <div class="confirm-box">
             <p><b>${esc(t('dl.arrived'))}</b>${o.photos.end ? ' ' + esc(t('dl.proof', { n: o.photos.end })) : ''}</p>
             ${o.disputed ? `<p class="notice">${esc(t('dl.disputed'))}</p>`
-              : `<p class="hint">${esc(t('dl.optional', { t: mmss((o.autoConfirmAt || Date.now()) - Date.now()) }))}</p>`}
-            <button class="btn btn-signal btn-block" type="button" data-act="confirm" data-id="${o.id}">${esc(t('dl.ok'))}</button>
+              : `<p class="hint">${esc(t('dc.give', { c: o.deliveryCode || '' }))}</p>`}
+            ${o.sim && !o.disputed ? `<button class="link-btn demo-btn" type="button" data-act="demo-code" data-id="${o.id}">${esc(t('dc.demo'))} →</button>` : ''}
           </div>` : ''}
 
         ${o.sim && store.NEXT[o.status] ? `<button class="link-btn demo-btn" type="button" data-act="demo-next" data-id="${o.id}">${esc(t('t.demoNext'))} →</button>` : ''}
@@ -413,11 +501,11 @@
       </section>`;
   }
 
+  // Photos de preuve : appareil photo en direct uniquement (pas de galerie), plusieurs prises.
   function photoInput(o, which, label) {
-    return `<label class="photo-in">
-      <input type="file" accept="image/*" multiple id="ph-${which}-${o.id}" data-act="photos" data-which="${which}" data-id="${o.id}">
-      <span>${esc(label)}</span><small class="mono">${esc(t('t.photosCount', { n: o.photos[which] }))}</small>
-    </label>`;
+    return `<button type="button" class="photo-in" id="ph-${which}-${o.id}" data-act="d-cam" data-which="${which}" data-id="${o.id}">
+      <span>📷 ${esc(label)}</span><small class="mono">${esc(t('t.photosCount', { n: o.photos[which] }))}</small>
+    </button>`;
   }
 
   function cancelBlock(o) {
@@ -480,8 +568,7 @@
         </div>
         <p class="hint">${esc(t('d.proofHint'))}</p>` : ''}
         ${nextKey ? `<button class="btn btn-signal btn-block" type="button" data-act="d-next" data-id="${o.id}">${esc(t(nextKey))}</button>` : ''}
-        ${o.status === 'arrived' ? `<p class="hint">${esc(t('d.waitClient'))}${o.autoConfirmAt ? ' ' + esc(t('d.autoIn', { t: mmss(o.autoConfirmAt - Date.now()) })) : ''}</p>
-          ${o.owner === 'me' ? `<button class="link-btn demo-btn" type="button" data-act="confirm" data-id="${o.id}">${esc(t('d.clientConfirm'))}</button>` : ''}` : ''}
+        ${o.status === 'arrived' ? codeForm(o) : ''}
       </article>`;
   }
 
@@ -990,6 +1077,9 @@
     <input id="df-${key}" data-dbind="${key}" type="${opts.type || 'text'}" value="${esc(view.dauth.f[key] || '')}"${opts.ph ? ` placeholder="${esc(opts.ph)}"` : ''}${opts.mode ? ` inputmode="${opts.mode}"` : ''}${opts.max ? ` maxlength="${opts.max}"` : ''}${opts.auto ? ` autocomplete="${opts.auto}"` : ''}></label>`;
   const dDoc = key => {
     const n = view.dauth.f.docs[key] || 0;
+    // Visage : scan en direct (pas de photo importée), il sert de référence pour les vérifications suivantes.
+    if (key === 'selfie') return `<button type="button" class="doc-in doc-face${n ? ' is-done' : ''}" id="dd-selfie" data-act="df-face">
+      ${n && view.dauth.f.faceRef ? `<img class="doc-face-img" src="${view.dauth.f.faceRef}" alt="">` : `<span class="doc-ic" aria-hidden="true">${n ? '✓' : '◉'}</span>`}<span>${esc(t('da.selfie'))}</span><small>${esc(t(n ? 'fs.redo' : 'fs.start'))}</small></button>`;
     return `<label class="doc-in${n ? ' is-done' : ''}">
       <input type="file" accept="image/*" capture="environment" id="dd-${key}" data-ddoc="${key}">
       <span class="doc-ic" aria-hidden="true">${n ? '✓' : '+'}</span><span>${esc(t('da.' + key))}</span><small>${esc(t(n ? 'da.added' : 'da.add'))}</small></label>`;
@@ -1308,6 +1398,8 @@
     // Seules les demandes pour le véhicule du chauffeur lui sont proposées.
     const requests = open.filter(o => o.vehicle === d.vehicle && !pending.includes(o) && !(d.declined && d.declined[o.id]));
     const avail = store.available();
+    // Course en cours : l'écran ne montre que la navigation et l'action suivante.
+    if (mineActive.length) return courseNav(mineActive[0]);
     return `
       ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
       ${driverTrips(d)}
@@ -1315,7 +1407,6 @@
       ${d.online && notifState() === 'default' ? `<div class="notif-hint"><span>${esc(t('nt.enableS'))}</span><button class="btn btn-light btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button></div>` : ''}
       ${view.celebrate ? `<div class="celebrate" role="status"><span class="celebrate-burst" aria-hidden="true"></span>
         <b>${esc(t('dh.done'))}</b><span class="mono">+ ${fcfa(view.celebrate.net)}</span><small>${esc(view.celebrate.msg)}</small></div>` : ''}
-      ${mineActive.length ? `<section class="app-sec"><h2 class="app-h">${esc(t('d.myCourse'))}</h2>${mineActive.map(driverCourse).join('')}</section>` : ''}
       ${pending.length ? `<section class="app-sec"><div class="stack">${pending.map(o => {
         const mine = o.offers.find(of => of.me && !of.declined);
         return `<div class="notice">${route(o)} · ${esc(t('d.offerSent', { p: fcfa(mine.price) }))}</div>`;
@@ -1447,40 +1538,152 @@
       <button class="btn btn-ghost btn-sm" type="button" data-act="logout-no">${esc(t('a.resetNo'))}</button></div></div>`;
   }
 
+  // Carte de demande dans la liste : un appui ouvre la demande en plein écran (carte + « Accepter »).
   function requestCard(o) {
-    const d = store.driver();
-    const c = commission(o.price, o.optionsPrice);
-    const avail = store.available();
-    const sameVehicle = o.vehicle === d.vehicle;
-    const msg = view.offerMsg[o.id];
-    const counterOpen = view.counterFor === o.id;
     return `
-      <article class="request">
+      <button type="button" class="request request-btn" data-act="rf-open" data-id="${o.id}">
         <div class="request-top">
           <div><b>${route(o)}</b><small>${esc(t('need.' + o.need))} · <span class="mono">${ui.km(o.km)}</span> · ${esc(o.owner === 'me' ? t('role.client') : o.client || '')}</small></div>
+          <span class="rq-go" aria-hidden="true">›</span>
         </div>
         <div class="earn-row">
           <div><small>${esc(t('dj.price'))}</small><b class="mono">${fcfa(o.price)}</b></div>
           <div class="earn-net"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o))}</b></div>
         </div>
-        <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
-        <p class="request-meta">${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` · ${esc(t('w.helpers'))} ${o.helpers}` : ''} · ${esc(t('pay.' + o.payment))} · ${esc(t(+o.passengers ? 'w.passN' : 'w.pass0', { n: +o.passengers || 0 }))} · ${esc(t('d.minPrice', { p: fcfa(o.minimum) }))}</p>
-        ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
-          ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
-          ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
-          <div class="btn-row">
-            <button class="btn btn-signal btn-sm" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(o.price) }))}</button>
-            <button class="btn btn-ghost btn-sm" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
-            <button class="btn btn-ghost btn-sm btn-decline" type="button" data-act="d-decline-open" data-id="${o.id}">${esc(t('dd.decline'))}</button>
-          </div>
-          ${view.declineFor === o.id ? `<div class="decline-box"><small>${esc(t('dd.why'))}</small><div class="tag-row">
-            ${['far', 'low', 'vehicle', 'heavy', 'other'].map(r => `<button type="button" class="tag" data-act="d-decline" data-id="${o.id}" data-r="${r}">${esc(t('dd.' + r))}</button>`).join('')}</div></div>` : ''}
-          ${counterOpen ? `<form class="counter-form" data-id="${o.id}">
-            <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${o.minimum}" value="${TK.roundUp100(o.price * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
-            <button class="btn btn-signal btn-sm" type="submit">${esc(t('d.send'))}</button>
-          </form>` : ''}`}
-      </article>`;
+        <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}${(o.itemPhotos || []).length ? ` · 📷 ${o.itemPhotos.length}` : ''}${o.voice ? ' · 🎤' : ''}</p>
+      </button>`;
   }
+
+  // Demande en plein écran : la carte du trajet derrière, le prix, et un seul grand bouton « Accepter ».
+  const REQ_SECONDS = 30;
+  function openRequest(id) { view.reqFull = id; view.reqFullUntil = Date.now() + REQ_SECONDS * 1000; view.counterFor = null; view.declineFor = null; }
+  function requestFull() {
+    const o = store.getOrder(view.reqFull), d = store.driver();
+    if (!o || o.status !== 'open' || !d || o.offers.some(of => of.me && !of.declined)) { view.reqFull = null; return ''; }
+    const c = commission(o.price, o.optionsPrice), avail = store.available();
+    const left = Math.max(0, Math.ceil((view.reqFullUntil - Date.now()) / 1000));
+    const msg = view.offerMsg[o.id];
+    const sameVehicle = o.vehicle === d.vehicle;
+    return `<div class="full-ov req-full" role="dialog" aria-modal="true" aria-label="${esc(t('rf.title'))}">
+      <div class="full-map">${ui.routeMap(o.from, o.to, null)}</div>
+      <button type="button" class="ov-x full-x" data-act="rf-close" aria-label="${esc(t('md.close'))}">✕</button>
+      <div class="full-sheet">
+        <div class="rf-head">
+          <div class="rf-price"><small>${esc(t('dj.price'))}</small><b class="mono">${fcfa(o.price)}</b><span>${esc(t('dj.net'))} <b class="mono">${fcfa(net(o))}</b></span></div>
+          <div class="rf-timer" style="--p:${(left / REQ_SECONDS).toFixed(3)}" role="timer" aria-label="${left} s"><b class="mono">${left}</b></div>
+        </div>
+        <ol class="rf-route">
+          <li><b>${esc(commune(o.from).name)}</b>${o.fromDetail ? `<small>${esc(o.fromDetail)}</small>` : ''}</li>
+          <li><b>${esc(commune(o.to).name)}</b>${o.toDetail ? `<small>${esc(o.toDetail)}</small>` : ''}</li>
+        </ol>
+        <p class="request-meta"><span class="mono">${ui.km(o.km)}</span> · ${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''} · ${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` (${o.helpers})` : ''} · ${esc(t('pay.' + o.payment))}</p>
+        ${clientMedia(o)}
+        ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
+        ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
+        ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
+        <button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(o.price) }))}</button>
+        <p class="hint rf-face">◉ ${esc(t('fs.acceptNote'))}</p>
+        <div class="rf-more">
+          <button class="link-btn" type="button" data-act="d-counter-open" data-id="${o.id}">${esc(t('d.counter'))}</button>
+          <button class="link-btn" type="button" data-act="d-decline-open" data-id="${o.id}">${esc(t('dd.decline'))}</button>
+        </div>
+        ${view.declineFor === o.id ? `<div class="decline-box"><small>${esc(t('dd.why'))}</small><div class="tag-row">
+          ${['far', 'low', 'vehicle', 'heavy', 'other'].map(r => `<button type="button" class="tag" data-act="d-decline" data-id="${o.id}" data-r="${r}">${esc(t('dd.' + r))}</button>`).join('')}</div></div>` : ''}
+        ${view.counterFor === o.id ? `<form class="counter-form" data-id="${o.id}">
+          <label class="price-input"><input type="number" id="ctr-${o.id}" step="100" min="${o.minimum}" value="${TK.roundUp100(o.price * 1.1)}" inputmode="numeric"><span>FCFA</span></label>
+          <button class="btn btn-signal btn-sm" type="submit">${esc(t('d.send'))}</button>
+        </form>` : ''}`}
+      </div></div>`;
+  }
+
+  // Photos et note vocale du client, visibles par le chauffeur avant d'accepter.
+  function clientMedia(o) {
+    const ph = o.itemPhotos || [];
+    if (!ph.length && !o.voice) return '';
+    return `<div class="cmedia">
+      ${o.voice ? `<div class="cm-voice"><span>🎤 ${esc(t('vc.client'))} · <span class="mono">${mmss(o.voice.sec * 1000)}</span></span><audio controls preload="none" src="${o.voice.url}"></audio></div>` : ''}
+      ${ph.length ? `<div class="thumbs">${ph.map((src, i) => `<button type="button" class="thumb" data-act="img-view" data-id="${o.id}" data-k="items" data-i="${i}" aria-label="${esc(t('ph.n', { n: i + 1 }))}"><img src="${src}" alt=""></button>`).join('')}</div>` : ''}
+    </div>`;
+  }
+  function proofThumbs(o) {
+    const p = o.proofs || {};
+    const all = (p.start || []).map((src, i) => ['start', i, src]).concat((p.end || []).map((src, i) => ['end', i, src]));
+    if (!all.length) return '';
+    return `<div class="thumbs">${all.map(([k, i, src]) => `<button type="button" class="thumb" data-act="img-view" data-id="${o.id}" data-k="${k}" data-i="${i}" aria-label="${esc(t(k === 'start' ? 't.photosStart' : 't.photosEnd'))} ${i + 1}"><img src="${src}" alt=""></button>`).join('')}</div>`;
+  }
+  function imgView(o, k, i) {
+    const src = k === 'items' ? (o.itemPhotos || [])[i] : ((o.proofs || {})[k] || [])[i];
+    if (!src) return;
+    const el = document.createElement('div');
+    el.className = 'media-ov lightbox';
+    el.innerHTML = `<img src="${src}" alt=""><button type="button" class="ov-x" aria-label="${esc(t('md.close'))}">✕</button>`;
+    el.addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+  }
+
+  // Course en cours : navigation plein écran. Carte, prochaine destination, une seule action à la fois.
+  function courseNav(o) {
+    const toPickup = ['assigned', 'pickup'].includes(o.status);
+    const dest = commune(toPickup ? o.from : o.to);
+    const detail = toPickup ? o.fromDetail : o.toDetail;
+    const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lon}&travelmode=driving`;
+    const nextKey = store.NEXT[o.status] ? 'd.next.' + o.status : null;
+    const faces = (o.faceChecks || []).length;
+    return `<section class="course-nav">
+      <div class="nav-card">
+        <div><small>${esc(t(toPickup ? 'nv.toPickup' : 'nv.toDrop'))}</small><b>${esc(dest.name)}${detail ? ` · ${esc(detail)}` : ''}</b></div>
+        <a class="btn btn-light btn-sm" href="${gmaps}" target="_blank" rel="noopener">${esc(t('nv.gmaps'))}</a>
+      </div>
+      <div class="nav-map">${ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
+      <div class="nav-sheet">
+        <div class="request-top"><div><b>${route(o)}</b><small>${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')} · <span class="mono">${fcfa(o.price)}</span></small></div>${pill(o.status)}</div>
+        ${callBlock(o, 'driver')}
+        ${o.status === 'pickup' ? `<div class="code-box code-box-driver">
+          <span>${esc(t('cv.verifyT'))}</span><b class="mono">${esc((o.clientPhone || '').slice(-4))}</b>
+          <small>${esc(t('cv.verifyS'))}</small></div>` : ''}
+        ${['loading', 'transit'].includes(o.status) ? `
+        <div class="photo-row">
+          ${photoInput(o, 'start', t('t.photosStart'))}
+          ${o.status === 'transit' ? photoInput(o, 'end', t('t.photosEnd')) : ''}
+        </div>
+        ${proofThumbs(o)}
+        <p class="hint">${esc(t(o.status === 'loading' ? 'nv.startNote' : 'd.proofHint2'))}</p>` : ''}
+        ${o.status === 'arrived' ? codeForm(o) : ''}
+        ${nextKey ? `<button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-next" data-id="${o.id}">${o.status === 'loading' ? '◉ ' : ''}${esc(t(nextKey))}</button>` : ''}
+        <details class="nav-more"><summary>${esc(t('nv.details'))}</summary>
+          <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}</p>
+          ${clientMedia(o)}
+          <p class="notice">${esc(o.payment === 'cash'
+            ? t('d.cashHint', { p: fcfa(o.price), n: fcfa(o.price - o.commission) })
+            : t('d.mmHint', { m: t('pay.' + o.payment), n: fcfa(o.price - o.commission) }))}</p>
+          ${faces ? `<p class="hint">✓ ${esc(t('fs.count', { n: faces }))}</p>` : ''}
+        </details>
+      </div>
+    </section>`;
+  }
+
+  // À l'arrivée, le chauffeur saisit le code à 4 chiffres donné par le client : la course est validée et payée.
+  function codeForm(o) {
+    const locked = (o.codeTries || 0) >= store.CODE_TRIES;
+    return `<form class="code-form" id="codeForm" data-id="${o.id}" novalidate>
+      <b>${esc(t('dc.enterT'))}</b>
+      <p class="hint">${esc(t('dc.enterS'))}</p>
+      ${locked ? `<p class="notice">${esc(t('dc.locked'))}</p>` : `
+      <input id="dc-in" class="code-in mono" type="text" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="····" aria-label="${esc(t('dc.enterT'))}">
+      ${view.codeErr ? `<p class="field-error" role="alert">${esc(view.codeErr)}</p>` : ''}
+      <button class="btn btn-signal btn-block btn-xl" type="submit">${esc(t('dc.validate'))}</button>`}
+      ${o.owner === 'other' ? `<p class="hint demo-hint">${esc(t('dc.demoHint', { c: o.deliveryCode }))}</p>` : `<p class="hint">${esc(t('dc.meHint'))}</p>`}
+    </form>`;
+  }
+
+  // Vérification du visage avant les étapes sensibles ; chaque contrôle est gardé comme preuve.
+  async function faceGate(step, orderId) {
+    const res = await TK.media.faceScan({ title: t('fs.t.' + step) });
+    if (!res.ok) { ui.toast(t('fs.cancel')); return false; }
+    store.faceCheck(step, orderId, res.image);
+    return true;
+  }
+
 
 
   // ---------- ADMIN : console d'opérations (organisation type back-office Huolala) ----------
@@ -2337,6 +2540,7 @@
     if (!n) return '';
     const o = n.orderId && store.getOrder(n.orderId);
     if (n.kind === 'request' && (!o || o.status !== 'open')) { view.dnotif = null; return ''; }
+    if (n.kind === 'request' && view.reqFull) return '';
     return `<div class="notif notif-${n.kind}${n.level === 2 ? ' is-ko' : ''}" role="alert">
       <span class="notif-ic" aria-hidden="true">${n.kind === 'request' ? '●' : '!'}</span>
       <div class="notif-txt"><b>${esc(n.title)}</b><span>${esc(n.body)}</span></div>
@@ -2620,7 +2824,8 @@
         <fieldset class="chips"><legend>${esc(t('vv.payWith'))}</legend>${PAYMENTS.slice(1).map(p => `<label class="chip-radio"><input type="radio" name="vv-pay" value="${p}" data-viv="pay"${vivState().pay === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}</fieldset>
         <button class="btn btn-signal btn-block" type="button" data-act="vv-paydep" data-trip="${trip.id}" data-id="${b.id}">${esc(t('vv.pay', { p: fcfa(b.deposit) }))}</button></div>` : ''}
       ${b.status === 'refused' ? `<div class="confirm-inline"><p>${esc(t('vv.refusedS', { p: fcfa(b.unitPrice) }))}</p>
-        <button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${trip.id}">${esc(t('vv.atDriverPrice', { p: fcfa(trip.pricePerUnit) }))}</button></div>` : ''}
+        <div class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="vv-pick" data-id="${trip.id}">${esc(t('vv.atDriverPrice', { p: fcfa(trip.pricePerUnit) }))}</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-act="vv-reprop" data-id="${trip.id}">${esc(t('vv.reprop'))}</button></div></div>` : ''}
       ${['booked', 'boarded'].includes(b.status) ? safetyBlock(trip, b) : ''}
       ${lm ? `<div class="confirm-box"><p>${esc(t('vv.lastMileOrder'))}</p><button class="btn btn-signal btn-sm" type="button" data-act="open-order" data-id="${lm.id}">${esc(t('vv.see'))}</button></div>` : ''}
       ${trip.status !== 'done' && b.status !== 'cancelled' && trip.sim ? `<button class="link-btn demo-btn" type="button" data-act="vv-advance" data-id="${trip.id}">${esc(t('vv.demoNext'))} →</button>` : ''}
@@ -2731,7 +2936,7 @@
         <label class="field"><span>${esc(t('vv.load'))}</span><select id="ag-kind">${['sac', 'carton', 'cageot'].map(k => `<option value="${k}"${k === g.kind ? ' selected' : ''}>${esc(t('vv.' + k))}</option>`).join('')}</select></label>
         <label class="field"><span>${esc(t('vv.qty'))}</span><input id="ag-units" type="number" min="1" value="${g.units}"></label>
         <label class="field"><span>${esc(t('w.passengers'))}</span><select id="ag-seats">${[0, 1, 2].map(n => `<option${n === g.seats ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
-        <label class="field"><span>${esc(t('ag.paid'))}</span><select id="ag-paid"><option value="no"${g.paid === 'no' ? ' selected' : ''}>${esc(t('ag.paidNo'))}</option><option value="orange"${g.paid === 'orange' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Orange Money</option><option value="wave"${g.paid === 'wave' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Wave</option><option value="mtn"${g.paid === 'mtn' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · MTN MoMo</option></select></label>
+        <label class="field"><span>${esc(t('ag.paid'))}</span><select id="ag-paid"><option value="no"${g.paid === 'no' ? ' selected' : ''}>${esc(t('ag.paidNo'))}</option><option value="orange"${g.paid === 'orange' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Orange Money</option><option value="wave"${g.paid === 'wave' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Wave</option><option value="mtn"${g.paid === 'mtn' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · MTN MoMo</option><option value="djamo"${g.paid === 'djamo' ? ' selected' : ''}>${esc(t('ag.paidYes'))} · Djamo</option></select></label>
       </div>
       <p class="field-error" id="ag-err" hidden>${esc(t('ag.err'))}</p>
       <button class="btn btn-signal" type="submit">${esc(t('ag.save'))}</button>
@@ -2796,6 +3001,66 @@
   }
 
   // ---------- rendu ----------
+  // ---------- RETOURS DES TESTEURS : chances, contre-propositions, médias, code de livraison, visage ----------
+  TK.addStrings({
+    fr: {
+      'w.proposeT': 'Proposez votre prix · contre-offre possible',
+      'ch.label': 'Chances qu’un chauffeur accepte', 'ch.low': 'Faibles', 'ch.mid': 'Moyennes', 'ch.good': 'Bonnes', 'ch.high': 'Très bonnes',
+      'ch.lowS': 'Ce prix est très en dessous de ce que les chauffeurs acceptent pour ce trajet.', 'ch.midS': 'Certains chauffeurs accepteront, d’autres feront une contre-offre.',
+      'ch.goodS': 'Un chauffeur devrait accepter rapidement.', 'ch.highS': 'Prix attractif : vous aurez vite plusieurs chauffeurs.',
+      'ch.tip': 'Conseil : à partir de {p}, vos chances deviennent bonnes.',
+      'rp.open': 'Changer mon prix', 'rp.openCounter': 'Pas d’accord ? Faire une autre proposition', 'rp.title': 'Votre nouvelle proposition',
+      'rp.note': 'Les chauffeurs reçoivent votre nouveau prix. Les contre-offres au moins égales restent valables. Minimum {min}.',
+      'rp.send': 'Envoyer ma proposition', 'rp.same': 'C’est déjà votre prix actuel.', 'rp.sent': 'Nouvelle proposition envoyée : {p}',
+      'dc.title': 'Code de livraison', 'dc.s': 'À donner au chauffeur à la livraison, seulement si tout est en ordre. Transmettez-le à la personne qui réceptionne.',
+      'dc.nowS': 'Vérifiez vos biens, puis donnez ce code au chauffeur.', 'dc.give': 'Vérifiez vos biens. Si tout est en ordre, donnez le code {c} au chauffeur : la course sera validée. En cas de problème, ne donnez pas le code et signalez-le.',
+      'dc.demo': 'Démo : le chauffeur saisit le code', 'dc.enterT': 'Code de livraison du client', 'dc.enterS': 'Demandez au client ses 4 chiffres. Le code valide la livraison et déclenche votre paiement.',
+      'dc.locked': 'Trop d’essais incorrects : le support Takaata vérifie la livraison et vous contacte.', 'dc.validate': 'Valider la livraison',
+      'dc.demoHint': 'Démo : le client vous donne le code {c}.', 'dc.meHint': 'Le client voit le code dans son application.',
+      'dc.four': 'Saisissez les 4 chiffres.', 'dc.ok': 'Livraison validée', 'dc.bad': 'Code incorrect. Il reste {n} essai(s).',
+      'fs.start': 'Scanner mon visage', 'fs.redo': 'Visage enregistré · refaire', 'fs.acceptNote': 'Scan rapide du visage pour accepter.',
+      'fs.t.online': 'Vérification avant de vous mettre en ligne', 'fs.t.accept': 'Vérification avant d’accepter la course',
+      'fs.t.start': 'Vérification avant le départ', 'fs.t.signup': 'Enregistrement de votre visage',
+      'fs.cancel': 'Vérification du visage annulée.', 'fs.okOnline': 'Visage vérifié : vous êtes en ligne', 'fs.count': 'Visage vérifié {n} fois pendant cette course',
+      'rf.title': 'Nouvelle demande',
+      'vc.client': 'Note vocale du client', 'vc.recS': 'Parlez au lieu d’écrire : « 2 cartons, 3 chaises… » · {n} s max',
+      'ph.n': 'Photo {n}', 'ph.list': 'Liste d’objets', 'ph.tab': 'Photos', 'ph.add': 'Ajouter des photos', 'ph.addS': 'Appareil photo ou galerie · {n} au maximum',
+      'ph.why': 'Le chauffeur voit vos objets avant d’accepter. Prochaine étape : reconnaissance automatique des objets pour suggérer le véhicule et le prix.',
+      'nv.toPickup': 'Allez au chargement', 'nv.toDrop': 'Livrez à', 'nv.gmaps': 'Itinéraire ↗', 'nv.details': 'Détails de la course',
+      'nv.startNote': 'Prenez des photos du chargement : elles sont obligatoires pour démarrer, avec un scan du visage.', 'nv.needPhotos': 'Prenez d’abord au moins une photo du chargement.',
+      'd.proofHint2': 'Photos = preuve en cas de litige.', 'd.next.loading': 'Démarrer la course', 'd.next.transit': 'Je suis arrivé',
+      'vv.reprop': 'Proposer un autre prix', 'da.selfie': 'Scan du visage en direct'
+    },
+    en: {
+      'w.proposeT': 'Name your price · counter-offers possible',
+      'ch.label': 'Chances a driver accepts', 'ch.low': 'Low', 'ch.mid': 'Medium', 'ch.good': 'Good', 'ch.high': 'Very good',
+      'ch.lowS': 'This price is far below what drivers accept for this trip.', 'ch.midS': 'Some drivers will accept, others will counter.',
+      'ch.goodS': 'A driver should accept quickly.', 'ch.highS': 'Attractive price: several drivers will answer fast.',
+      'ch.tip': 'Tip: from {p}, your chances become good.',
+      'rp.open': 'Change my price', 'rp.openCounter': 'Not happy? Make another offer', 'rp.title': 'Your new offer',
+      'rp.note': 'Drivers get your new price. Counter-offers at or above it stay valid. Minimum {min}.',
+      'rp.send': 'Send my offer', 'rp.same': 'That is already your current price.', 'rp.sent': 'New offer sent: {p}',
+      'dc.title': 'Delivery code', 'dc.s': 'Give it to the driver at delivery, only if everything is fine. Share it with whoever receives the goods.',
+      'dc.nowS': 'Check your goods, then give this code to the driver.', 'dc.give': 'Check your goods. If everything is fine, give code {c} to the driver: the trip will be validated. If there is a problem, do not give the code and report it.',
+      'dc.demo': 'Demo: the driver enters the code', 'dc.enterT': 'Customer’s delivery code', 'dc.enterS': 'Ask the customer for their 4 digits. The code validates the delivery and triggers your payment.',
+      'dc.locked': 'Too many wrong attempts: Takaata support will check the delivery and contact you.', 'dc.validate': 'Validate delivery',
+      'dc.demoHint': 'Demo: the customer gives you code {c}.', 'dc.meHint': 'The customer sees the code in their app.',
+      'dc.four': 'Enter the 4 digits.', 'dc.ok': 'Delivery validated', 'dc.bad': 'Wrong code. {n} attempt(s) left.',
+      'fs.start': 'Scan my face', 'fs.redo': 'Face saved · redo', 'fs.acceptNote': 'Quick face scan to accept.',
+      'fs.t.online': 'Check before going online', 'fs.t.accept': 'Check before accepting the trip',
+      'fs.t.start': 'Check before departure', 'fs.t.signup': 'Saving your face',
+      'fs.cancel': 'Face check cancelled.', 'fs.okOnline': 'Face checked: you are online', 'fs.count': 'Face checked {n} time(s) during this trip',
+      'rf.title': 'New request',
+      'vc.client': 'Customer’s voice note', 'vc.recS': 'Speak instead of typing: “2 boxes, 3 chairs…” · {n} s max',
+      'ph.n': 'Photo {n}', 'ph.list': 'Item list', 'ph.tab': 'Photos', 'ph.add': 'Add photos', 'ph.addS': 'Camera or gallery · up to {n}',
+      'ph.why': 'The driver sees your items before accepting. Next step: automatic item recognition to suggest the vehicle and the price.',
+      'nv.toPickup': 'Go to pickup', 'nv.toDrop': 'Deliver to', 'nv.gmaps': 'Directions ↗', 'nv.details': 'Trip details',
+      'nv.startNote': 'Take photos of the load: they are required to start, with a face scan.', 'nv.needPhotos': 'First take at least one photo of the load.',
+      'd.proofHint2': 'Photos = proof in case of dispute.', 'd.next.loading': 'Start the trip', 'd.next.transit': 'I have arrived',
+      'vv.reprop': 'Offer another price', 'da.selfie': 'Live face scan'
+    }
+  });
+
   function currentRole() { return ROUTES[location.hash.slice(1)] || null; }
 
   let lastHtml = '';
@@ -2823,7 +3088,7 @@
 
     const withNav = (role === 'client' && signedIn) || (role === 'driver' && !!store.driver());
     const nav = !withNav ? '' : role === 'driver' ? driverNav() : bottomNav();
-    const call = (view.call && role !== 'admin' ? callOverlay() : '') + (role === 'driver' && store.driver() ? notifBanner() : '');
+    const call = (view.call && role !== 'admin' ? callOverlay() : '') + (role === 'driver' && store.driver() ? notifBanner() + (view.reqFull ? requestFull() : '') : '');
     const html = `${header(role)}<main class="app-main${withNav ? ' has-nav' : ''}${role === 'admin' ? ' is-admin' : ''}">${body}<p class="app-demo">${esc(t('app.demo'))}</p></main>${nav}${call}`;
     // Ne remplace l'écran que s'il a changé : évite de perdre un appui pendant un rafraîchissement.
     if (html === lastHtml && root.innerHTML) return;
@@ -2934,16 +3199,51 @@
       case 'hangup': view.call = null; render(); break;
       case 'dtab': view.dtab = b.dataset.tab; view.dmeSub = ''; view.confirmLogout = false; view.supportSent = false; dgo(); break;
       case 'dme-sub': view.dmeSub = b.dataset.sub; view.confirmLogout = false; view.supportSent = false; dgo(); break;
-      case 'd-online': store.setOnline(!store.driver().online); break;
+      case 'd-online': {
+        // Se mettre en ligne demande un scan du visage ; se déconnecter, non.
+        if (store.driver().online) store.setOnline(false);
+        else faceGate('online').then(ok => { if (ok) { store.setOnline(true); ui.toast(t('fs.okOnline')); } });
+        break;
+      }
+      case 'df-face': {
+        TK.media.faceScan({ title: t('fs.t.signup') }).then(res => {
+          if (!res.ok) return;
+          view.dauth.f.docs.selfie = 1; view.dauth.f.faceRef = res.image; render();
+        });
+        break;
+      }
+      case 'rf-open': openRequest(id); render(); break;
+      case 'rf-close': view.reqFull = null; render(); break;
+      case 'img-view': { const o = store.getOrder(id); if (o) imgView(o, b.dataset.k, +b.dataset.i); break; }
+      case 'd-cam': {
+        const which = b.dataset.which;
+        TK.media.camera({ title: t(which === 'start' ? 't.photosStart' : 't.photosEnd') }).then(shots => { if (shots.length) store.addPhotos(id, which, shots); });
+        break;
+      }
+      case 'items-tab': view.itemsTab = b.dataset.t; render(); break;
+      case 'item-ph-del': view.draft.itemPhotos.splice(+b.dataset.i, 1); render(); break;
+      case 'voice-rec': toggleVoice(); break;
+      case 'voice-del': view.draft.voice = null; render(); break;
+      case 'reprop-open': view.repropOpen = true; view.repropPrice = null; render(); break;
+      case 'reprop-close': view.repropOpen = false; render(); break;
+      case 'rp-step': {
+        const o = store.getOrder(view.orderId), input = document.getElementById('o-newprice');
+        if (!o || !input) break;
+        view.repropPrice = Math.max(o.minimum, (Number(input.value) || o.price) + +b.dataset.d);
+        input.value = view.repropPrice;
+        refreshChance(input, orderChanceArgs(o, view.repropPrice));
+        break;
+      }
+      case 'demo-code': { const o = store.getOrder(id); if (o) { store.submitDeliveryCode(id, o.deliveryCode); ui.toast(t('toast.delivered')); } break; }
+      case 'vv-reprop': { const v = vivState(); v.confirm = null; v.propFor = id; if (view.name !== 'home') go('home'); else dgo(); break; }
       case 'nt-close': view.dnotif = null; render(); break;
-      case 'nt-view': view.dnotif = null; view.dtab = 'jobs'; dgo(); break;
+      case 'nt-view': { const n = view.dnotif; view.dnotif = null; view.dtab = 'jobs'; if (n && n.orderId) openRequest(n.orderId); dgo(); break; }
       case 'nt-recharge': view.dnotif = null; view.dtab = 'gains'; dgo(); break;
       case 'nt-accept': {
+        // Accepter passe toujours par la demande en plein écran et le scan du visage.
+        view.dnotif = null; view.dtab = 'jobs';
         const o = store.getOrder(id);
-        view.dnotif = null;
-        const res = o ? store.driverOffer(id, o.price) : { ok: false };
-        view.dtab = 'jobs';
-        if (res.ok) ui.toast(t('nt.sent')); else if (res.missing) ui.toast(t('d.need', { m: fcfa(res.missing) }));
+        if (o && o.status === 'open') openRequest(id);
         dgo();
         break;
       }
@@ -3055,13 +3355,31 @@
       }
       case 'd-accept': {
         const o = store.getOrder(id);
-        const res = store.driverOffer(id, o.price);
-        view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
-        render();
+        if (store.available() < commission(o.price, o.optionsPrice)) break;
+        // Accepter une course : scan du visage pour confirmer que c'est bien ce chauffeur.
+        faceGate('accept', id).then(ok => {
+          if (!ok) return;
+          const res = store.driverOffer(id, o.price);
+          view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
+          if (res.ok) { view.reqFull = null; ui.toast(t('nt.sent')); }
+          render();
+        });
         break;
       }
       case 'd-counter-open': view.counterFor = view.counterFor === id ? null : id; render(); break;
-      case 'd-next': store.advance(id); break;
+      case 'd-next': {
+        const o = store.getOrder(id);
+        if (!o) break;
+        // Démarrer la course : photos du chargement obligatoires, puis scan du visage (même chauffeur qu'au chargement).
+        if (o.status === 'loading') {
+          if (!o.photos.start) { ui.toast(t('nv.needPhotos')); break; }
+          faceGate('start', id).then(ok => { if (ok) store.advance(id); });
+          break;
+        }
+        store.advance(id);
+        if (o.status === 'arrived') { view.codeErr = ''; render(); const el = document.getElementById('dc-in'); if (el) el.focus(); }
+        break;
+      }
       case 'reset-ask': view.confirmReset = true; render(); break;
       case 'reset-no': view.confirmReset = false; render(); break;
       case 'reset-yes': view.confirmReset = false; store.reset(); go('home'); ui.toast(t('toast.reset')); break;
@@ -3096,6 +3414,18 @@
 
   root.addEventListener('input', e => {
     if (e.target.id === 'adm-q') { view.adm.q = e.target.value; render(); return; }
+    if (e.target.id === 'w-price' && view.draft) {
+      bindValue(e.target);
+      const d = view.draft, q = draftQuote(d);
+      refreshChance(e.target, draftChanceArgs(Object.assign({}, d, { price: Number(e.target.value) || 0 }), q, distanceKm(d.from, d.to)));
+      return;
+    }
+    if (e.target.id === 'o-newprice') {
+      const o = store.getOrder(view.orderId);
+      view.repropPrice = Number(e.target.value) || null;
+      if (o) refreshChance(e.target, orderChanceArgs(o, Number(e.target.value) || 0));
+      return;
+    }
     if (e.target.dataset.dbind && e.target.matches('input:not([type=checkbox]):not([type=radio]), textarea')) { dBind(e.target); return; }
     if (e.target.matches('input[type=text], input:not([type]), textarea, input[type=number], input[type=datetime-local]')) bindValue(e.target);
   });
@@ -3114,9 +3444,18 @@
     if (el.id === 'adm-reason') { view.adm.reason = el.value; return; }
     if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
     if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
-    if (el.dataset.act === 'photos') {
-      const n = el.files ? el.files.length : 0;
-      if (n) store.addPhotos(el.dataset.id, el.dataset.which, n);
+    if (el.id === 'w-itemPhotos' && view.draft) {
+      const files = Array.from(el.files || []);
+      const d = view.draft;
+      d.itemPhotos = d.itemPhotos || [];
+      (async () => {
+        for (const f of files) {
+          if (d.itemPhotos.length >= ITEM_PHOTOS_MAX) break;
+          const img = await TK.media.fileToJpeg(f, 800, 0.6);
+          if (img) d.itemPhotos.push(img);
+        }
+        render();
+      })();
       return;
     }
     if (bindValue(el)) {
@@ -3286,9 +3625,27 @@
       const o = store.getOrder(id);
       const price = Number(input.value);
       if (!price || price < o.minimum) { view.offerMsg[id] = t('w.belowMin', { min: fcfa(o.minimum) }); render(); return; }
-      const res = store.driverOffer(id, price);
-      view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
-      if (res.ok) view.counterFor = null;
+      faceGate('accept', id).then(ok => {
+        if (!ok) return;
+        const res = store.driverOffer(id, price);
+        view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
+        if (res.ok) { view.counterFor = null; view.reqFull = null; ui.toast(t('nt.sent')); }
+        render();
+      });
+    } else if (f.id === 'codeForm') {
+      const id = f.dataset.id, val = (document.getElementById('dc-in').value || '').replace(/\D/g, '');
+      if (val.length !== 4) { view.codeErr = t('dc.four'); render(); return; }
+      const res = store.submitDeliveryCode(id, val);
+      if (res.ok) { view.codeErr = ''; ui.toast(t('dc.ok')); render(); return; }
+      view.codeErr = res.locked ? '' : t('dc.bad', { n: res.left });
+      render();
+    } else if (f.id === 'repropForm') {
+      const o = store.getOrder(f.dataset.id), price = Math.round(Number(document.getElementById('o-newprice').value) || 0);
+      if (!o) return;
+      if (price < o.minimum) { ui.toast(t('w.belowMin', { min: fcfa(o.minimum) })); return; }
+      const res = store.repropose(o.id, price);
+      if (res.same) { ui.toast(t('rp.same')); return; }
+      if (res.ok) { view.repropOpen = false; view.repropPrice = null; ui.toast(t('rp.sent', { p: fcfa(price) })); }
       render();
     }
   });
@@ -3350,7 +3707,12 @@
       if (ev.type === 'accepted' && currentRole() === 'driver') ui.toast(t('toast.accepted'));
       if (ev.type === 'declined' && currentRole() === 'driver') ui.toast(t('d.declined'));
       if (ev.type === 'approved' && currentRole() === 'driver') ui.toast(t('da.approved'));
-      if (ev.type === 'request') requestNotif(ev.order);
+      if (ev.type === 'request') {
+        requestNotif(ev.order);
+        // Nouvelle demande : elle s'ouvre en plein écran si le chauffeur n'est pas déjà occupé.
+        const busy = store.state.orders.some(x => x.driver && x.driver.me && ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(x.status));
+        if (currentRole() === 'driver' && view.dtab === 'jobs' && !view.reqFull && !busy && !document.querySelector('.media-ov')) openRequest(ev.order.id);
+      }
       if (ev.type === 'proposal' && currentRole() === 'client' && ev.booking.phone === store.state.session) ui.toast(t(ev.booking.status === 'accepted' ? 'vv.propAccepted' : 'vv.propRefused'));
     });
     // Comptes à rebours : clôture automatique, renvoi du code SMS ; carte en direct.
@@ -3359,8 +3721,10 @@
     const o = view.name === 'order' && store.getOrder(view.orderId);
     if (role === 'client' && !store.user() && view.auth.step === 'otp') render();
     else if (role === 'driver' && !store.driver() && view.dauth.step === 'otp') render();
-    else if (role === 'client' && o && o.status === 'arrived' && o.autoConfirmAt) render();
-    else if (role === 'driver' && store.state.orders.some(x => x.driver && x.driver.me && x.status === 'arrived')) render();
+    else if (role === 'driver' && view.reqFull) {
+      if (Date.now() >= view.reqFullUntil) view.reqFull = null;
+      render();
+    }
   }, 1000);
 
   window.TKApp = {
@@ -3384,7 +3748,8 @@
       if (location.hash !== '#chauffeur') location.hash = 'chauffeur';
       view.dtab = m.action === 'open' && !m.orderId ? 'gains' : 'jobs';
       const o = m.orderId && store.getOrder(m.orderId);
-      if (m.action === 'accept' && o) { const res = store.driverOffer(o.id, o.price); if (res.ok) ui.toast(t('nt.sent')); }
+      // « Accepter » depuis la notification ouvre la demande en plein écran (le scan du visage reste obligatoire).
+      if (m.action === 'accept' && o && o.status === 'open') openRequest(o.id);
       dgo();
     });
   }
