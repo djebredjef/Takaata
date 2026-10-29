@@ -227,10 +227,10 @@
         <section class="items-pick">
           <h2 class="app-h">${esc(t('w.items'))} <small>${esc(t('w.optional'))}</small></h2>
           <div class="seg" role="tablist" aria-label="${esc(t('w.items'))}">
-            <button type="button" role="tab" class="seg-btn${view.itemsTab !== 'photos' ? ' is-on' : ''}" aria-selected="${view.itemsTab !== 'photos'}" data-act="items-tab" data-t="list">${esc(t('ph.list'))}</button>
-            <button type="button" role="tab" class="seg-btn${view.itemsTab === 'photos' ? ' is-on' : ''}" aria-selected="${view.itemsTab === 'photos'}" data-act="items-tab" data-t="photos">📷 ${esc(t('ph.tab'))}${(d.itemPhotos || []).length ? ` · ${d.itemPhotos.length}` : ''}</button>
+            <button type="button" role="tab" class="seg-btn${view.itemsTab !== 'list' ? ' is-on' : ''}" aria-selected="${view.itemsTab !== 'list'}" data-act="items-tab" data-t="photos">📷 ${esc(t('ph.tab'))}${(d.itemPhotos || []).length ? ` · ${d.itemPhotos.length}` : ''}</button>
+            <button type="button" role="tab" class="seg-btn${view.itemsTab === 'list' ? ' is-on' : ''}" aria-selected="${view.itemsTab === 'list'}" data-act="items-tab" data-t="list">${esc(t('ph.list'))}</button>
           </div>
-          ${view.itemsTab === 'photos' ? itemPhotosPanel(d) : `
+          ${view.itemsTab !== 'list' ? itemPhotosPanel(d) : `
           <ul class="pick-grid">${keys.map(pick).join('')}</ul>
           ${rest.length ? (view.moreItems
             ? `<ul class="pick-grid">${rest.map(pick).join('')}</ul>`
