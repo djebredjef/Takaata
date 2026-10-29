@@ -27,6 +27,8 @@
       <nav class="nav" aria-label="Navigation">
         <a href="#comment" data-i18n="nav.how">Comment ça marche</a>
         <a href="#vehicules" data-i18n="nav.vehicles">Véhicules et prix</a>
+        <a href="#vivriers" data-i18n="nav.vivriers">Vivriers</a>
+        <a href="#securite" data-i18n="nav.safety">Sécurité</a>
         <a href="#chauffeurs" data-i18n="nav.drivers">Chauffeurs</a>
         <a href="#entreprises" data-i18n="nav.business">Entreprises</a>
         <a href="#faq" data-i18n="nav.faq">FAQ</a>
@@ -45,7 +47,7 @@
         <div class="hero-copy">
           <p class="eyebrow" data-i18n="hero.eyebrow">Transport de marchandises à la demande · Abidjan</p>
           <h1 data-i18n="hero.title">Le bon véhicule, au prix que vous acceptez.</h1>
-          <p class="lead" data-i18n="hero.lead">Déménagement, meubles, vivriers, colis volumineux : publiez votre demande, recevez les offres de chauffeurs vérifiés et choisissez celle qui vous convient.</p>
+          <p class="lead" data-i18n="hero.lead">Déménagement, meubles, marchandises, colis volumineux : décrivez votre chargement en photos ou par note vocale, proposez votre prix et choisissez parmi les offres de chauffeurs vérifiés.</p>
           <div class="hero-cta">
             <a class="btn btn-signal" href="#app" data-i18n="hero.ctaClient">Commander un transport</a>
             <a class="btn btn-ghost" href="#chauffeur" data-i18n="hero.ctaDriver">Devenir chauffeur partenaire</a>
@@ -83,7 +85,7 @@
             <div><dt data-i18n="quote.floor">Prix plancher</dt><dd class="mono" id="qFloor">–</dd></div>
             <div class="total"><dt data-i18n="quote.reference">Prix de référence</dt><dd class="mono" id="qPrice">–</dd></div>
           </dl>
-          <p class="waybill-note" data-i18n="quote.note">Hors options (manutention, étages, emballage). Vous proposez votre prix ; les chauffeurs acceptent ou font une contre-offre.</p>
+          <p class="waybill-note" data-i18n="quote.note">Hors options (aides, étages). Dans l'app, vous proposez votre prix et voyez vos chances qu'un chauffeur l'accepte.</p>
           <a class="btn btn-signal btn-block" href="#app" id="qGo" data-i18n="quote.go">Publier cette demande</a>
         </form>
       </div>
@@ -98,29 +100,58 @@
           <li>
             <span class="step-n mono">1</span>
             <h3 data-i18n="how.s1t">Publication</h3>
-            <p data-i18n="how.s1">Vous décrivez le trajet et le chargement. L'app suggère un prix de référence que vous pouvez ajuster.</p>
+            <p data-i18n="how.s1">Vous indiquez le trajet et le chargement : photos, liste d'objets ou note vocale. L'app suggère un prix de référence.</p>
           </li>
           <li>
             <span class="step-n mono">2</span>
-            <h3 data-i18n="how.s2t">Offres</h3>
-            <p data-i18n="how.s2">Les chauffeurs à proximité acceptent votre prix ou envoient une contre-offre, jamais sous le plancher.</p>
+            <h3 data-i18n="how.s2t">Votre prix</h3>
+            <p data-i18n="how.s2">Vous proposez votre prix, jamais sous le minimum. Une jauge vous montre vos chances qu'un chauffeur accepte.</p>
           </li>
           <li>
             <span class="step-n mono">3</span>
-            <h3 data-i18n="how.s3t">Sélection</h3>
-            <p data-i18n="how.s3">Vous comparez prix, note du chauffeur et distance, puis vous choisissez.</p>
+            <h3 data-i18n="how.s3t">Offres</h3>
+            <p data-i18n="how.s3">Les chauffeurs acceptent ou font une contre-offre. Pas d'accord ? Vous refaites une proposition, autant de fois que nécessaire.</p>
           </li>
           <li>
             <span class="step-n mono">4</span>
-            <h3 data-i18n="how.s4t">Départ</h3>
-            <p data-i18n="how.s4">La course démarre une fois l'accord validé par les deux. Vous suivez chaque étape jusqu'à la livraison.</p>
+            <h3 data-i18n="how.s4t">Livraison</h3>
+            <p data-i18n="how.s4">Vous suivez la course étape par étape. À l'arrivée, vous vérifiez vos biens, puis vous donnez votre code de livraison à 4 chiffres.</p>
           </li>
         </ol>
       </div>
     </section>
 
+    <!-- Vivriers vers Abidjan -->
+    <section class="section section-alt" id="vivriers">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow" data-i18n="viv.eyebrow">Nouveau · axe Bouaké → Abidjan</p>
+          <h2 data-i18n="viv.title">Vivriers vers Abidjan : votre place réservée avant la nuit.</h2>
+          <p class="lead" data-i18n="viv.lead">Commerçantes de vivriers, fini l'attente au bord de la route. Réservez vos sacs dans un camion qui descend vers Abidjan et sachez à quelle heure il passe à votre arrêt.</p>
+          <ul class="ticks">
+            <li data-i18n="viv.b1">Réservation au sac, au carton ou au cageot, avec l'heure de passage à votre arrêt (Tiébissou, Yamoussoukro, Toumodi, N'Douci…).</li>
+            <li data-i18n="viv.b2">Arrivée à Gesco avant l'ouverture des marchés, et suite possible jusqu'au marché d'Adjamé.</li>
+            <li data-i18n="viv.b3">Jusqu’à 2 places en cabine pour voyager avec votre marchandise.</li>
+            <li data-i18n="viv.b4">Le chauffeur fixe son prix ; vous pouvez proposer le vôtre. Acompte par Mobile Money, le reste à la montée.</li>
+            <li data-i18n="viv.b5">Pas d'application ? Réservez par WhatsApp : un agent Takaata réserve pour vous et vous envoie la confirmation.</li>
+          </ul>
+          <a class="btn btn-signal" href="#app" data-i18n="viv.cta">Réserver une place</a>
+        </div>
+        <div class="viv-demo">
+          <p class="ledger-title" data-i18n="viv.demoT">Exemple : une nuit de départ</p>
+          <ol class="viv-times">
+            <li><b class="mono">22:30</b><span data-i18n="viv.d1">Départ de Bouaké</span></li>
+            <li><b class="mono">23:25</b><span data-i18n="viv.d2">Passage à Yamoussoukro · péage</span></li>
+            <li><b class="mono">00:20</b><span data-i18n="viv.d3">Passage à Toumodi</span></li>
+            <li class="is-end"><b class="mono">03:45</b><span data-i18n="viv.d4">Arrivée à Gesco</span></li>
+          </ol>
+          <p class="fine" data-i18n="viv.demoNote">Horaires indicatifs, calculés à partir de l’heure de départ publiée par le chauffeur.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- Véhicules et grille -->
-    <section class="section section-alt" id="vehicules">
+    <section class="section" id="vehicules">
       <div class="wrap">
         <p class="eyebrow" data-i18n="veh.eyebrow">Grille de référence du pilote</p>
         <h2 data-i18n="veh.title">Quatre véhicules, une formule lisible.</h2>
@@ -146,7 +177,7 @@
     </section>
 
     <!-- Règles claires -->
-    <section class="section" id="regles">
+    <section class="section section-alt" id="regles">
       <div class="wrap">
         <p class="eyebrow" data-i18n="rules.eyebrow">Tout est dit avant le départ</p>
         <h2 data-i18n="rules.title">Des règles claires, pas de surprise à l'arrivée.</h2>
@@ -164,8 +195,8 @@
             <p data-i18n="rules.r3">Gratuite avant attribution, et pendant 5 minutes après si le chauffeur n'est pas parti. Une annulation due au chauffeur reste gratuite pour vous.</p>
           </article>
           <article>
-            <h3 data-i18n="rules.r4t">Photos et litiges</h3>
-            <p data-i18n="rules.r4">Photos au départ et à l'arrivée, réserves enregistrées, signalement dans l'app. Le support prend le dossier en charge sous un jour ouvré.</p>
+            <h3 data-i18n="rules.r4t">Photos et code de livraison</h3>
+            <p data-i18n="rules.r4">Le chauffeur photographie le chargement au départ et la marchandise à l'arrivée. La course n'est validée qu'avec votre code, que vous donnez seulement si tout est en ordre.</p>
           </article>
           <article>
             <h3 data-i18n="rules.r5t">Paiement</h3>
@@ -179,6 +210,46 @@
       </div>
     </section>
 
+    <!-- Sécurité -->
+    <section class="section" id="securite">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="sf.eyebrow">Sécurité</p>
+        <h2 data-i18n="sf.titleSite">Pendant toute la course, vous n’êtes jamais seul.</h2>
+        <div class="rules safety-grid">
+          <article>
+            <span class="sf-ic" aria-hidden="true">✓</span>
+            <h3 data-i18n="sf.s1t">Chauffeurs vérifiés</h3>
+            <p data-i18n="sf.s1">Pièce d'identité, permis, carte grise, assurance et visite technique contrôlés à l'inscription.</p>
+          </article>
+          <article>
+            <span class="sf-ic" aria-hidden="true">◉</span>
+            <h3 data-i18n="sf.s2t">Visage vérifié</h3>
+            <p data-i18n="sf.s2">Le chauffeur confirme son identité par un scan du visage avant de partir vers vous, puis avant de démarrer la course.</p>
+          </article>
+          <article>
+            <span class="sf-ic" aria-hidden="true">#</span>
+            <h3 data-i18n="sf.s3t">Code de livraison</h3>
+            <p data-i18n="sf.s3">La course se termine avec votre code à 4 chiffres. Sans votre code, le chauffeur n’est pas payé.</p>
+          </article>
+          <article>
+            <span class="sf-ic" aria-hidden="true">📍</span>
+            <h3 data-i18n="sf.s4t">Position partagée</h3>
+            <p data-i18n="sf.s4">Client comme chauffeur peuvent envoyer leur position à un proche par WhatsApp, en un geste.</p>
+          </article>
+          <article>
+            <span class="sf-ic" aria-hidden="true">!</span>
+            <h3 data-i18n="sf.s5t">Bouton Urgence</h3>
+            <p data-i18n="sf.s5">Une alerte prioritaire part au support Takaata avec votre position, et les numéros d’urgence sont à portée de main.</p>
+          </article>
+          <article>
+            <span class="sf-ic" aria-hidden="true">☎</span>
+            <h3 data-i18n="sf.s6t">Appels masqués</h3>
+            <p data-i18n="sf.s6">Client et chauffeur s’appellent sans voir le numéro de l’autre, et seulement pendant la course.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <!-- Chauffeurs -->
     <section class="section section-ink" id="chauffeurs">
       <div class="wrap split">
@@ -186,11 +257,11 @@
           <p class="eyebrow" data-i18n="drv.eyebrow">Chauffeurs partenaires</p>
           <h2 data-i18n="drv.title">Gardez 85 % de chaque course.</h2>
           <ul class="ticks">
-            <li data-i18n="drv.b1">Commission unique de 15 %, affichée avant d'accepter.</li>
-            <li data-i18n="drv.b2">Des demandes qualifiées près de vous, avec le chargement décrit.</li>
-            <li data-i18n="drv.b3">Vous acceptez le prix du client ou vous faites votre contre-offre.</li>
-            <li data-i18n="drv.b4">Historique de vos courses et de votre solde, traitement des litiges.</li>
-            <li data-i18n="drv.b5">Formation gratuite à l'application dans votre commune.</li>
+            <li data-i18n="drv.b1">Commission de 15 % sur le transport seulement : les aides et les étages vous reviennent entièrement. Vous voyez votre gain net avant d'accepter.</li>
+            <li data-i18n="drv.b2">Des demandes près de vous pour votre véhicule, avec photos du chargement ou note vocale du client.</li>
+            <li data-i18n="drv.b3">Vous acceptez en un geste ou vous proposez le gain net que vous voulez.</li>
+            <li data-i18n="drv.b4">Trajets retour Bouaké → Abidjan : remplissez votre camion avec les vivriers des commerçantes.</li>
+            <li data-i18n="drv.b5">Solde prépayé rechargeable par Mobile Money dès 5 000 FCFA, objectif du jour et historique de vos gains.</li>
           </ul>
           <a class="btn btn-signal" href="#chauffeur" data-i18n="drv.cta">Ouvrir l'espace chauffeur</a>
         </div>
@@ -200,7 +271,7 @@
             <li><span data-i18n="drv.ex1">Solde de départ</span><b>10 000</b></li>
             <li><span data-i18n="drv.ex2">Course acceptée à 8 000 : réservation 15 %</span><b>− 1 200 <small data-i18n="drv.reserved">réservé</small></b></li>
             <li><span data-i18n="drv.ex3">Le client paie 8 000 en espèces</span><b class="pos">+ 8 000 <small data-i18n="drv.inHand">en main</small></b></li>
-            <li><span data-i18n="drv.ex4">Livraison confirmée : commission débitée</span><b>− 1 200</b></li>
+            <li><span data-i18n="drv.ex4">Livraison validée par le code du client : commission débitée</span><b>− 1 200</b></li>
             <li class="sum"><span data-i18n="drv.ex5">Nouveau solde</span><b>8 800</b></li>
           </ol>
           <p class="ledger-note" data-i18n="drv.exNote">Pas de commission si la course n'a pas lieu. En Mobile Money, Takaata retient la commission sur le paiement et vous reverse le net, sans toucher au solde.</p>
@@ -251,10 +322,13 @@
     <section class="section" id="faq">
       <div class="wrap narrow">
         <h2 data-i18n="faq.title">Questions fréquentes</h2>
-        <details><summary data-i18n="faq.q1">Comment le prix est-il fixé ?</summary><p data-i18n="faq.a1">L'app calcule un prix de référence selon le véhicule, la distance et vos options. Vous proposez votre prix, au-dessus du plancher. Les chauffeurs l'acceptent ou font une contre-offre, et vous choisissez.</p></details>
+        <details><summary data-i18n="faq.q1">Comment le prix est-il fixé ?</summary><p data-i18n="faq.a1">L'app calcule un prix de référence selon le véhicule, la distance et vos options. Vous proposez votre prix, au-dessus du minimum, et une jauge vous indique vos chances qu'il soit accepté. Les chauffeurs acceptent ou font une contre-offre, et vous choisissez.</p></details>
         <details><summary data-i18n="faq.q2">Comment payer ?</summary><p data-i18n="faq.a2">En espèces au chauffeur, ou par Mobile Money (Orange Money, Wave, MTN MoMo, Djamo), selon les moyens disponibles au lancement.</p></details>
         <details><summary data-i18n="faq.q3">Mes biens sont-ils assurés ?</summary><p data-i18n="faq.a3">Chaque course est documentée par des photos au départ et à l'arrivée et une preuve de livraison. En cas de dommage, le support traite le dossier selon les responsabilités établies. Aucune assurance tous risques n'est annoncée tant qu'un assureur ne l'a pas confirmée par écrit.</p></details>
-        <details><summary data-i18n="faq.q4">Les chauffeurs sont-ils vérifiés ?</summary><p data-i18n="faq.a4">Oui : pièce d'identité et véhicule sont contrôlés à l'inscription. Chaque course est notée par le client.</p></details>
+        <details><summary data-i18n="faq.q4">Les chauffeurs sont-ils vérifiés ?</summary><p data-i18n="faq.a4">Oui : pièce d'identité, permis et véhicule sont contrôlés à l'inscription, et le chauffeur confirme son visage pendant chaque course. Chaque course est notée par le client.</p></details>
+        <details><summary data-i18n="faq.q6">À quoi sert le code de livraison ?</summary><p data-i18n="faq.a6">Vous recevez un code à 4 chiffres dès qu'un chauffeur est attribué. Donnez-le seulement quand vos biens sont livrés et en bon état : c'est lui qui valide la course. Si quelqu'un d'autre réceptionne, transmettez-lui le code.</p></details>
+        <details><summary data-i18n="faq.q7">Puis-je voyager avec ma marchandise ?</summary><p data-i18n="faq.a7">Oui, jusqu'à 2 personnes dans la cabine, sans supplément pour les courses en ville.</p></details>
+        <details><summary data-i18n="faq.q8">Je ne sais pas utiliser une application. Comment faire ?</summary><p data-i18n="faq.a8">Vous pouvez décrire votre chargement par note vocale ou en photos. Pour les vivriers, vous pouvez aussi réserver par WhatsApp : un agent Takaata s'occupe de tout.</p></details>
         <details><summary data-i18n="faq.q5">Faut-il télécharger une application ?</summary><p data-i18n="faq.a5">Non. Takaata s'ouvre dans le navigateur et s'installe sur l'écran d'accueil de votre téléphone, comme une application.</p></details>
       </div>
     </section>

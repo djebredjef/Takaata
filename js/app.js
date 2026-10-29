@@ -1675,11 +1675,11 @@
   function safetyBar(o, side) {
     return `<div class="safety-bar">
         <button class="btn btn-wa btn-sm" type="button" data-act="share-loc" data-id="${o.id}" data-side="${side}">📍 ${esc(t('loc.share'))}</button>
-        <button class="btn btn-danger btn-sm" type="button" data-act="o-sos" data-id="${o.id}">${esc(t('sf.sos'))}</button>
+        <button class="btn btn-sos btn-sm" type="button" data-act="o-sos" data-id="${o.id}"><svg class="sos-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>${esc(t('sf.sos'))}</button>
       </div>
       ${view.sosFor === o.id ? `<div class="confirm-inline sos-box" role="alertdialog" aria-label="${esc(t('sf.sos'))}">
         <p><b>${esc(t('sos.q'))}</b></p>
-        <button class="btn btn-danger btn-block" type="button" data-act="o-sos-yes" data-id="${o.id}" data-side="${side}">${esc(t('sf.sosYes'))}</button>
+        <button class="btn btn-sos btn-block" type="button" data-act="o-sos-yes" data-id="${o.id}" data-side="${side}">${esc(t('sf.sosYes'))}</button>
         <div class="sos-calls">${[['110', 'sos.police'], ['180', 'sos.fire'], ['185', 'sos.samu']].map(([n, k]) => `<a class="btn btn-ghost btn-sm" href="tel:${n}">${esc(t(k))} ${n}</a>`).join('')}</div>
         <p class="hint">${esc(t('sos.note'))}</p>
         <button class="link-btn" type="button" data-act="o-sos-no">${esc(t('a.resetNo'))}</button>
@@ -2886,10 +2886,10 @@
       <p class="hint">✓ ${esc(t('sf.verified'))}</p>
       <div class="btn-row">
         <a class="btn btn-wa btn-sm" href="${waLink('', msg)}" target="_blank" rel="noopener">${esc(t('sf.share'))}</a>
-        <button class="btn btn-danger btn-sm" type="button" data-act="sf-sos">${esc(t('sf.sos'))}</button>
+        <button class="btn btn-sos btn-sm" type="button" data-act="sf-sos"><svg class="sos-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>${esc(t('sf.sos'))}</button>
       </div>
       ${view.sosAsk ? `<div class="confirm-inline"><p>${esc(t('sf.sosQ'))}</p><div class="btn-row">
-        <button class="btn btn-danger btn-sm" type="button" data-act="sf-sos-yes" data-trip="${trip.id}" data-id="${b.id}">${esc(t('sf.sosYes'))}</button>
+        <button class="btn btn-sos btn-sm" type="button" data-act="sf-sos-yes" data-trip="${trip.id}" data-id="${b.id}">${esc(t('sf.sosYes'))}</button>
         <button class="btn btn-ghost btn-sm" type="button" data-act="sf-sos-no">${esc(t('a.resetNo'))}</button></div></div>` : ''}
       <p class="hint">${esc(t('sf.numbers'))}</p>
     </section>`;

@@ -1,6 +1,7 @@
 /* Takaata — lagune profonde + orange signalisation. Mise en page : bandes pleine largeur,
    contenu sur une colonne de 1120px ; l'app est une colonne mobile de 560px. */
 :root {
+  --sos: #D92D20;
   --bg: #F2F5F4;
   --surface: #FFFFFF;
   --surface-2: #E8EEEC;
@@ -1358,3 +1359,26 @@ body.media-open { overflow: hidden; }
 .nav-map.is-locked { min-height: 22vh; text-align: center; padding: 20px; color: var(--muted); font-weight: 600; }
 .hint.is-todo { color: var(--danger); font-weight: 600; }
 .code-form.is-off { border-color: var(--line-strong); background: var(--surface-2, var(--bg)); }
+
+/* Bouton Urgence : rouge vif (distinct de l'orange de la marque) avec pictogramme */
+.btn-sos { background: var(--sos); color: #FFFFFF; gap: 6px; }
+.btn-sos:hover { filter: brightness(1.08); }
+.sos-ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.sos-box { border-color: var(--sos) !important; }
+
+/* Site : section Vivriers et section Sécurité */
+.viv-demo { display: grid; gap: 14px; padding: 22px; border-radius: var(--r); background: var(--band); color: var(--band-ink); min-width: 0; }
+.viv-demo .ledger-title { color: var(--band-muted); }
+.viv-demo .fine { color: var(--band-muted); }
+.viv-times { list-style: none; margin: 0; padding: 0 0 0 22px; display: grid; gap: 16px; position: relative; }
+.viv-times::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; border-left: 2px dashed var(--band-line); }
+.viv-times li { position: relative; display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: baseline; }
+.viv-times li::before { content: ""; position: absolute; left: -22px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--leaf); }
+.viv-times li.is-end::before { background: var(--signal); }
+.viv-times b { font-size: 18px; }
+.safety-grid article { gap: 10px; }
+.sf-ic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--signal-soft); color: var(--signal); font-weight: 700; font-size: 18px; }
+.safety-grid article:nth-child(5) .sf-ic { background: var(--danger-soft); color: var(--sos); }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; gap: 32px; } }
+@media (max-width: 820px) { .safety-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .safety-grid { grid-template-columns: 1fr; } }
