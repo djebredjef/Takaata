@@ -119,11 +119,61 @@
     return roundUp100(args.reference * 1.2);
   }
 
+  // ---------- Contrôle de capacité (le même contrôle est refait par le serveur à chaque modification) ----------
+  // Dimensions moyennes des objets, en mètres (longueur, largeur, hauteur).
+  const ITEM_DIMS = {
+    box: [0.5, 0.4, 0.4], sack: [0.8, 0.5, 0.25], crate: [0.6, 0.4, 0.3], mattress: [1.9, 1.4, 0.25], bed: [2.0, 1.6, 0.3],
+    fridge: [1.8, 0.7, 0.7], freezer: [1.2, 0.7, 0.9], washer: [0.85, 0.6, 0.6], sofa: [2.0, 0.9, 0.85], armchair: [0.9, 0.85, 0.85],
+    tv: [1.3, 0.8, 0.15], wardrobe: [2.0, 1.8, 0.6], table: [1.6, 0.9, 0.75], chairs: [0.9, 0.5, 0.1], fan: [1.2, 0.4, 0.4],
+    gas: [0.6, 0.35, 0.35], moto: [1.9, 1.1, 0.7], pallet: [1.2, 1.2, 0.8], cement: [0.6, 0.4, 0.12], rebar: [6.0, 0.05, 0.05], drinks: [0.4, 0.3, 0.3]
+  };
+  // Règles par véhicule (pilote, à confirmer avec les chauffeurs) : places en cabine, distance maximale,
+  // hauteur utile d'une caisse ouverte (chargement dépassant des ridelles), taux de remplissage réaliste.
+  const VEH_RULES = {
+    tricycle: { maxPassengers: 1, maxKm: 25, openHeight: 1.0 },
+    van1t: { maxPassengers: 2 },
+    truck3t: { maxPassengers: 2 },
+    truck10t: { maxPassengers: 2 }
+  };
+  const FILL_RATE = 0.8;
+
+  function loadOf(d) {
+    const W = (TK.vehicles && TK.vehicles.WEIGHTS) || {};
+    const items = Object.entries(d.itemsQty || {}).filter(([, n]) => n > 0);
+    const est = items.reduce((a, [k, n]) => a + (W[k] || 0) * n, 0);
+    const kg = Number(d.weightManual) > 0 ? Number(d.weightManual) : est || Number(d.weightKg) || 0;
+    const volume = items.reduce((a, [k, n]) => a + (ITEM_DIMS[k] ? ITEM_DIMS[k].reduce((x, y) => x * y, 1) : 0) * n, 0);
+    return { kg, volume: Math.round(volume * 100) / 100, items };
+  }
+  // Vérifie qu'un chargement tient dans un véhicule : poids, volume, plus grand objet, passagers, distance.
+  function checkLoad(d, vehicleId = d.vehicle, km = d.km) {
+    const spec = TK.vehicles && TK.vehicles.SPECS[vehicleId];
+    const rule = VEH_RULES[vehicleId] || {};
+    if (!spec) return { ok: false, errors: [{ code: 'vehicle' }] };
+    const { kg, volume, items } = loadOf(d);
+    const h = spec.open ? rule.openHeight || spec.h : spec.h;
+    const usable = Math.round(spec.l * spec.w * h * FILL_RATE * 100) / 100;
+    const box = [spec.l, spec.w, h].sort((a, b) => b - a);
+    const errors = [];
+    if (kg > spec.payloadKg) errors.push({ code: 'weight', kg, max: spec.payloadKg });
+    if (volume > usable) errors.push({ code: 'volume', vol: volume, max: usable });
+    for (const [k] of items) {
+      const dims = (ITEM_DIMS[k] || []).slice().sort((a, b) => b - a);
+      const i = dims.findIndex((x, j) => x > box[j] + 1e-9);
+      if (i >= 0) errors.push({ code: 'size', item: k, len: dims[i], max: box[i] });
+    }
+    if ((+d.passengers || 0) > (rule.maxPassengers ?? 2)) errors.push({ code: 'passengers', n: +d.passengers, max: rule.maxPassengers });
+    if (rule.maxKm && km > rule.maxKm) errors.push({ code: 'distance', km, max: rule.maxKm });
+    return { ok: !errors.length, errors, kg, volume, usable };
+  }
+  // Plus petit véhicule qui accepte ce chargement.
+  function vehicleFor(d, km = d.km) { return VEHICLES.find(v => checkLoad(d, v.id, km).ok) || null; }
+
   // Commission prélevée sur la part transport seulement : les options (aides, étages) reviennent entièrement au chauffeur.
   const commission = (price, options = 0) => Math.round(Math.max(0, price - options) * COMMISSION_RATE);
 
   window.TK = Object.assign(window.TK || {}, {
     COMMISSION_RATE, VEHICLES, OPTIONS, COMMUNES, NEEDS, PAYMENTS, STATUSES,
-    commune, vehicle, distanceKm, nearestCommune, quote, optionsTotal, commission, roundUp100, acceptChance, goodPrice
+    commune, vehicle, distanceKm, nearestCommune, quote, optionsTotal, commission, roundUp100, acceptChance, goodPrice, ITEM_DIMS, VEH_RULES, loadOf, checkLoad, vehicleFor
   });
 })();

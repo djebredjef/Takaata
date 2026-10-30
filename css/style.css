@@ -1410,3 +1410,19 @@ body.big-text .app-main .app-title { font-size: 30px; }
 .ref-bar { display: block; height: 5px; margin-top: 4px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .ref-bar i { display: block; height: 100%; background: var(--leaf); }
 #memberForm .phone-in { flex: 1 1 180px; }
+
+/* Contrôles de capacité, documents, litiges */
+.cap-errors { margin: 4px 0 0; padding: 10px 12px 10px 28px; border-radius: var(--r-sm); background: var(--danger-soft); color: var(--danger); font-size: 14px; font-weight: 600; display: grid; gap: 4px; }
+.plan-tag { margin: 0; justify-self: start; display: inline-block; padding: 4px 10px; border-radius: 999px; background: var(--signal-soft); color: var(--ink); font-size: 13.5px; font-weight: 600; }
+.notice-ko { border-color: var(--danger) !important; background: var(--danger-soft) !important; color: var(--danger); font-weight: 600; }
+.doc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.doc-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
+.doc-thumb { width: 48px; height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--line); display: grid; place-items: center; color: var(--muted); cursor: pointer; }
+.doc-thumb.is-empty { cursor: default; }
+.doc-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.doc-main { display: grid; min-width: 0; }
+.doc-main small { color: var(--muted); font-size: 12.5px; }
+.doc-acts { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.doc-acts input[type=date] { min-height: 38px; border: 1.5px solid var(--line-strong); border-radius: var(--r-sm); padding: 0 8px; background: var(--surface); color: var(--ink); }
+.rp-form { display: grid; gap: 8px; margin-top: 6px; }
+.adm-tiles + .app-h, .adm-card + .app-h { margin-top: 16px; }

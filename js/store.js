@@ -67,7 +67,16 @@
       state = raw ? Object.assign(defaultState(), JSON.parse(raw)) : defaultState();
     } catch (e) { state = defaultState(); }
     if (!state.seeded) seed();
+    // Anciennes données : identifiant et statut pour chaque signalement.
+    (state.reports || []).forEach((r, i) => { if (!r.id) r.id = 'RP-' + (r.at || Date.now()).toString(36).toUpperCase() + i; if (!r.status) r.status = r.resolved ? 'resolved' : 'open'; if (!r.type) r.type = r.urgent ? 'sos' : r.orderId ? 'dispute' : 'message'; });
   }
+  // Session déjà ouverte dans un autre onglet (ex. Admin) : on recharge l'état dès qu'il change,
+  // pour qu'une suspension ou une validation s'applique immédiatement.
+  window.addEventListener('storage', e => {
+    if (e.key !== KEY || !e.newValue) return;
+    try { state = Object.assign(defaultState(), JSON.parse(e.newValue)); } catch (err) { return; }
+    listeners.forEach(fn => fn());
+  });
   function save() {
     try { saveRaw(); } catch (e) {
       // Stockage plein (photos, notes vocales) : on retire les médias des courses terminées les plus anciennes.
@@ -130,8 +139,22 @@
       price, status: 'open', offers: [], plannedOffers: [], timeline: {}, photos: { start: 0, end: 0 },
       clientPhone: owner === 'me' ? state.session : demoPhone(rng(draft.from + draft.to + draft.client))
     });
+    const chk = TK.checkLoad(o, o.vehicle, km);
+    o.weightKg = chk.kg; o.volume = chk.volume;
     if (owner === 'me') o.plannedOffers = planOffers(o);
     return o;
+  }
+
+  // Contrôle « serveur » d'une demande : capacité réelle du véhicule et date prévue.
+  const PLAN_MIN_MS = 15 * 60 * 1000, PLAN_MAX_DAYS = 30;
+  function validateDraft(draft) {
+    const km = distanceKm(draft.from, draft.to);
+    const errors = TK.checkLoad(Object.assign({}, draft, { km }), draft.vehicle, km).errors.slice();
+    if (draft.when === 'later') {
+      const at = new Date(draft.whenAt).getTime();
+      if (!at || at < Date.now() + PLAN_MIN_MS || at > Date.now() + PLAN_MAX_DAYS * 864e5) errors.push({ code: 'date' });
+    }
+    return errors;
   }
 
   function planOffers(o, base = o.createdAt) {
@@ -153,11 +176,13 @@
   }
 
   function createOrder(draft) {
+    const errors = validateDraft(draft);
+    if (errors.length) { track('rejected_publish', null, { codes: errors.map(e => e.code), vehicle: draft.vehicle }); emit(); return { ok: false, errors }; }
     const o = buildOrder(draft, 'me');
     state.orders.unshift(o);
     track('created', o, { price: o.price, reference: o.reference, service: o.service, passengers: +o.passengers || 0 });
     emit();
-    return o;
+    return { ok: true, order: o };
   }
 
   const getOrder = id => state.orders.find(o => o.id === id);
@@ -188,6 +213,48 @@
     return planned.concat(o.offers).filter(of => !of.declined).sort((a, b) => a.price - b.price || b.rating - a.rating);
   }
 
+  // --- dossier chauffeur : documents et droits d'agir ---
+  // Un document peut être : manquant, fourni (à vérifier), vérifié, refusé ou expiré. Une date seule ne prouve rien.
+  const REQUIRED_DOCS = ['idFront', 'idBack', 'selfie', 'license', 'regCard', 'insurance', 'inspection', 'vehicleFront', 'vehicleCargo'];
+  const DOC_EXPIRY = { license: 'licenseExp', insurance: 'insuranceExp', inspection: 'inspectionExp' };
+  function docState(d, key) {
+    if (!d || !(d.docs && d.docs[key])) return 'missing';
+    const exp = DOC_EXPIRY[key] && d[DOC_EXPIRY[key]];
+    if (DOC_EXPIRY[key] && (!exp || new Date(exp).getTime() < Date.now())) return 'expired';
+    const rv = (d.docReview || {})[key];
+    return rv ? rv.status : 'provided';
+  }
+  const docsBlocking = d => REQUIRED_DOCS.filter(k => ['missing', 'expired', 'refused'].includes(docState(d, k)));
+  function reviewDoc(phone, key, ok, reason) {
+    const d = state.driverAccounts[phone];
+    if (!d || !(d.docs && d.docs[key])) return;
+    d.docReview = Object.assign({}, d.docReview, { [key]: { status: ok ? 'verified' : 'refused', reason: ok ? '' : reason || '', at: Date.now() } });
+    emit();
+  }
+  // Document renvoyé par le chauffeur (nouvelle photo, nouvelle date) : il repasse en « fourni, à vérifier ».
+  function updateDoc(key, img, exp) {
+    const d = drv();
+    if (!d || !REQUIRED_DOCS.includes(key)) return { ok: false };
+    const ek = DOC_EXPIRY[key];
+    if (ek) { if (!exp || new Date(exp).getTime() <= Date.now()) return { ok: false, code: 'date' }; d[ek] = exp; }
+    d.docs = Object.assign({}, d.docs, { [key]: 1 });
+    d.docImgs = Object.assign({}, d.docImgs, { [key]: img });
+    d.docReview = Object.assign({}, d.docReview); delete d.docReview[key];
+    d.docsSubmittedAt = Date.now();
+    track('doc_updated', null, { driver: d.phone, doc: key });
+    emit();
+    return { ok: true };
+  }
+  // Chauffeur autorisé à agir : dossier validé, non suspendu, documents valides.
+  function activeDrv() { const d = drv(); return d && d.status === 'approved' && !d.suspended && !docsBlocking(d).length ? d : null; }
+  function blockReason(d) {
+    if (!d) return 'nodriver';
+    if (d.suspended) return 'suspended';
+    if (d.status !== 'approved') return 'pending';
+    if (docsBlocking(d).length) return 'docs';
+    return '';
+  }
+
   // --- solde chauffeur ---
   // Chauffeur connecté sur cet appareil.
   function drv() { return state.driverAccounts[state.driverSession] || null; }
@@ -198,6 +265,7 @@
 
   function recharge(amount, channel) {
     amount = Math.round(amount);
+    if (!drv() || drv().suspended) return false;
     if (!(amount >= RECHARGE_MIN)) return false;
     drv().balance += amount;
     ledger('recharge', amount, { channel });
@@ -220,8 +288,16 @@
   function driverOffer(orderId, price) {
     const o = getOrder(orderId);
     const dd = drv();
-    if (!o || o.status !== 'open' || !dd || dd.status !== 'approved' || dd.suspended || !dd.online) return { ok: false };
+    if (!o || o.status !== 'open') return { ok: false };
+    const why = blockReason(dd);
+    if (why) return { ok: false, reason: why };
+    if (!dd.online) return { ok: false, reason: 'offline' };
     if (o.offers.some(of => of.me && !of.declined)) return { ok: false };
+    // Refait à chaque acceptation : véhicule, capacité réelle, et une seule course à la fois (charge déjà embarquée).
+    if (o.vehicle !== dd.vehicle) return { ok: false, reason: 'vehicle' };
+    const chk = TK.checkLoad(o, dd.vehicle, o.km);
+    if (!chk.ok) return { ok: false, reason: 'capacity', errors: chk.errors };
+    if (state.orders.some(x => x.driver && x.driver.me && CALLABLE.includes(x.status))) return { ok: false, reason: 'busy' };
     price = Math.max(o.minimum, Math.round(price));
     const c = commission(price, o.optionsPrice);
     if (available() < c) return { ok: false, missing: c - available() };
@@ -229,7 +305,7 @@
     track('offer', o, { driver: dd.phone, kind: price === o.price ? 'accept' : 'counter', price, asked: o.price, reference: o.reference, delayMs: Date.now() - o.createdAt });
     const d = drv();
     o.offers.push({
-      id: `${o.id}-me`, me: true, at: Date.now(), name: `${d.firstName} ${d.lastName}`, rating: driverRating(d), trips: d.trips,
+      id: `${o.id}-me`, me: true, driverPhone: d.phone, at: Date.now(), name: `${d.firstName} ${d.lastName}`, rating: driverRating(d), trips: d.trips,
       plate: d.plate, phone: '+225 ' + d.phone.replace(/(\d{2})(?=\d)/g, '$1 '), eta: 6, price, kind: price === o.price ? 'accept' : 'counter'
     });
     // Les clients simulés répondent après quelques secondes.
@@ -244,8 +320,9 @@
     const offer = visibleOffers(o).find(of => of.id === offerId);
     if (!offer) return;
     if (offer.me) {
-      // Réservation déjà faite ; on vérifie qu'elle couvre bien le prix retenu.
+      // Réservation déjà faite ; on vérifie qu'elle couvre bien le prix retenu, et on refait les contrôles du chauffeur.
       if (!drv() || drv().holds[o.id] !== commission(offer.price, o.optionsPrice)) return;
+      if (!activeDrv() || !TK.checkLoad(o, drv().vehicle, o.km).ok) { offer.declined = true; release(o.id); emit(); return; }
     } else {
       // Mon offre éventuelle n'est pas retenue : libération immédiate.
       const mine = o.offers.find(of => of.me && !of.declined);
@@ -274,6 +351,7 @@
   function advance(orderId) {
     const o = getOrder(orderId);
     if (!o || !NEXT[o.status]) return;
+    if (o.driver && o.driver.me && !activeDrv()) return;
     o.status = NEXT[o.status];
     o.timeline[o.status] = Date.now();
     if (o.schedule) delete o.schedule[o.status];
@@ -290,6 +368,8 @@
     if (!o || o.status !== 'arrived') return;
     o.status = 'delivered';
     o.closedBy = by;
+    if (by === 'support') state.reports.filter(x => x.orderId === o.id && x.status !== 'resolved').forEach(x => Object.assign(x, { status: 'resolved', resolved: true, resolvedAt: Date.now(), outcome: 'validate' }));
+    o.disputed = false;
     track('delivered', o, { driver: o.driver && who(o.driver), price: o.price, by, durationMs: Date.now() - (o.timeline.assigned || o.createdAt) });
     o.timeline.delivered = Date.now();
     // Le chauffeur note aussi le client. Chauffeur simulé : 5 étoiles ; chauffeur de cet appareil : il choisit après le code.
@@ -317,13 +397,14 @@
   function submitDeliveryCode(orderId, codeIn) {
     const o = getOrder(orderId);
     if (!o || o.status !== 'arrived') return { ok: false };
+    if (o.driver && o.driver.me && !activeDrv()) return { ok: false, blocked: true };
     if (o.codeTries >= CODE_TRIES) return { ok: false, locked: true };
     // Le chauffeur photographie la marchandise livrée (2 photos minimum) avant de saisir le code.
     if (o.driver && o.driver.me && (o.photos.end || 0) < END_PHOTOS_MIN) return { ok: false, photos: true };
     if (String(codeIn).trim() !== o.deliveryCode) {
       o.codeTries = (o.codeTries || 0) + 1;
       track('code_failed', o, { tries: o.codeTries });
-      if (o.codeTries >= CODE_TRIES) { o.disputed = true; state.reports.unshift({ at: Date.now(), orderId: o.id, text: 'Code de livraison : 5 essais incorrects.', phone: o.clientPhone, urgent: true }); }
+      if (o.codeTries >= CODE_TRIES) { o.disputed = true; addReport({ orderId: o.id, text: 'Code de livraison : 5 essais incorrects.', phone: o.clientPhone, type: 'dispute' }); }
       emit();
       return { ok: false, left: CODE_TRIES - o.codeTries };
     }
@@ -334,7 +415,7 @@
   // Vérifications du visage du chauffeur (en ligne, acceptation, départ) : gardées comme preuve.
   function faceCheck(step, orderId, image) {
     const d = drv();
-    if (!d) return;
+    if (!d || d.suspended) return;
     const entry = { at: Date.now(), step, orderId: orderId || null, ok: true };
     d.faceChecks = [entry].concat(d.faceChecks || []).slice(0, 50);
     if (image && step === 'online') d.lastFace = image;
@@ -393,11 +474,13 @@
     if (!r) return null;
     const at = r.nextAt || nextOccurrence(r.days, r.time);
     const when = new Date(at - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    const o = createOrder(Object.assign(JSON.parse(JSON.stringify(r.template)), { when: 'later', whenAt: when, recurringId: r.id }));
-    r.created.unshift(o.id);
+    const res = createOrder(Object.assign(JSON.parse(JSON.stringify(r.template)), { when: 'later', whenAt: when, recurringId: r.id }));
     r.nextAt = nextOccurrence(r.days, r.time, at);
+    if (!res.ok) { r.lastError = res.errors.map(e => e.code).join(','); emit(); return null; }
+    r.lastError = '';
+    r.created.unshift(res.order.id);
     emit();
-    return o;
+    return res.order;
   }
   const myRecurring = () => (state.recurring || []).filter(r => r.owner === state.session);
 
@@ -454,7 +537,7 @@
   // Preuves photo du chauffeur (prises en direct) : nombre + miniatures.
   function addPhotos(orderId, which, images) {
     const o = getOrder(orderId);
-    if (!o) return;
+    if (!o || (o.driver && o.driver.me && !activeDrv())) return;
     const list = Array.isArray(images) ? images : [];
     o.photos[which] += list.length || +images || 0;
     o.proofs = o.proofs || { start: [], end: [] };
@@ -462,8 +545,16 @@
     emit();
   }
 
+  // Signalements : message, litige (lié à une course) ou urgence. Cycle : ouvert → en cours → résolu (avec décision).
+  function addReport(r) {
+    const rep = Object.assign({ id: 'RP-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase(), at: Date.now(), status: 'open',
+      type: r.urgent ? 'sos' : r.orderId ? 'dispute' : 'message' }, r);
+    state.reports.unshift(rep);
+    return rep;
+  }
+  function takeReport(id) { const r = state.reports.find(x => x.id === id); if (r && r.status === 'open') { r.status = 'progress'; r.takenAt = Date.now(); emit(); } }
   function report(orderId, text) {
-    state.reports.unshift({ at: Date.now(), orderId, text, phone: state.session });
+    addReport({ orderId, text, phone: state.session });
     if (orderId) dispute(orderId);
     emit();
   }
@@ -539,9 +630,18 @@
       lastSpawn = now;
     }
     for (const d of Object.values(state.driverAccounts)) {
-      if (d.status === 'pending' && now - d.submittedAt >= DEMO_REVIEW_MS) {
-        d.status = 'approved'; d.reviewedAt = now; changed = true;
-        if (d.phone === state.driverSession) events.push({ type: 'approved' });
+      if (d.status === 'pending' && now - d.submittedAt >= DEMO_REVIEW_MS && !d.demoReviewed) {
+        // Démo : l'équipe « vérifie » les documents fournis et valides ; un dossier incomplet reste en attente.
+        d.demoReviewed = true; changed = true;
+        d.docReview = Object.assign({}, d.docReview);
+        REQUIRED_DOCS.forEach(k => { if (docState(d, k) === 'provided') d.docReview[k] = { status: 'verified', at: now, demo: true }; });
+        if (!docsBlocking(d).length) { d.status = 'approved'; d.reviewedAt = now; if (d.phone === state.driverSession) events.push({ type: 'approved' }); }
+      }
+      if (d.suspended && d.online) { d.online = false; changed = true; }
+      if (d.status === 'approved' && d.docsSubmittedAt && now - d.docsSubmittedAt >= DEMO_REVIEW_MS) {
+        delete d.docsSubmittedAt; changed = true;
+        d.docReview = Object.assign({}, d.docReview);
+        REQUIRED_DOCS.forEach(k => { if (docState(d, k) === 'provided') d.docReview[k] = { status: 'verified', at: now, demo: true }; });
       }
     }
     if (changed) emit();
@@ -576,12 +676,35 @@
     const d = state.driverAccounts[phone];
     if (!d) return;
     d.suspended = on;
-    if (on) d.online = false;
+    if (on) {
+      if (d.online) {
+        d.online = false;
+        const ss = d.sessions || [];
+        if (ss.length && !ss[ss.length - 1].to) ss[ss.length - 1].to = Date.now();
+      }
+      // Ses offres en attente sont retirées et les commissions réservées libérées.
+      for (const o of state.orders) {
+        if (o.status !== 'open') continue;
+        const of = o.offers.find(x => x.driverPhone === phone && !x.declined);
+        if (of) { of.declined = true; if (d.holds[o.id] != null) { const amount = d.holds[o.id]; delete d.holds[o.id]; d.ledger.unshift({ at: Date.now(), type: 'release', amount, orderId: o.id }); } }
+      }
+      track('suspended', null, { driver: phone });
+    }
     emit();
   }
-  function resolveReport(at) {
-    const r = state.reports.find(x => x.at === at);
-    if (r) { r.resolved = true; emit(); }
+  // Décision du support : valider la livraison, annuler la course, rembourser le client, ou classer sans suite.
+  function resolveReport(id, outcome, note) {
+    const r = state.reports.find(x => x.id === id);
+    if (!r || r.status === 'resolved') return;
+    const o = r.orderId && !r.trip && getOrder(r.orderId);
+    Object.assign(r, { status: 'resolved', resolved: true, resolvedAt: Date.now(), outcome: outcome || 'closed', note: note || '' });
+    if (o) {
+      if (outcome === 'validate' && o.status === 'arrived') confirmDelivery(o.id, 'support');
+      if (outcome === 'cancel' && !['delivered', 'cancelled'].includes(o.status)) { o.cancelledBy = 'support'; cancelOrder(o.id); }
+      if (!state.reports.some(x => x.orderId === o.id && x.status !== 'resolved')) o.disputed = false;
+    }
+    track('report_resolved', o || null, { outcome: r.outcome, type: r.type, ms: r.resolvedAt - r.at });
+    emit();
   }
   function adminCancel(orderId) {
     const o = getOrder(orderId);
@@ -602,13 +725,16 @@
   // En ligne / hors ligne : on garde les sessions pour le temps en ligne.
   function setOnline(on) {
     const d = drv();
-    if (!d || !!d.online === on) return;
+    if (!d) return { ok: false };
+    if (on && blockReason(d)) return { ok: false, reason: blockReason(d) };
+    if (!!d.online === on) return { ok: true };
     d.online = on;
     d.sessions = d.sessions || [];
     if (on) d.sessions.push({ from: Date.now() });
     else if (d.sessions.length && !d.sessions[d.sessions.length - 1].to) d.sessions[d.sessions.length - 1].to = Date.now();
     track(on ? 'online' : 'offline', null, { driver: d.phone });
     emit();
+    return { ok: true };
   }
   function onlineMsSince(d, since) {
     return (d.sessions || []).reduce((a, x) => a + Math.max(0, (x.to || Date.now()) - Math.max(x.from, since)), 0);
@@ -676,22 +802,51 @@
     return trip.depart + (b.km - a.km) / SPEED_KMH * 36e5 + served * STOP_MIN * 60000;
   }
   const arrivalTime = trip => stopTime(trip, 'gesco');
+  // Capacité d'un trajet en kg : « places » = sacs de 50 kg, plafonnées par la charge utile réelle du véhicule.
+  const UNIT_KG = { sac: 50, carton: 20, cageot: 25 };
+  const TRIP_VEHICLES = ['van1t', 'truck3t', 'truck10t'];
+  const payloadOf = v => (TK.vehicles && TK.vehicles.SPECS[v] ? TK.vehicles.SPECS[v].payloadKg : 0);
+  const tripMaxKg = trip => Math.min(trip.capacity * UNIT_KG.sac, payloadOf(trip.vehicle) || Infinity);
   function tripLoad(trip) {
     const live = trip.bookings.filter(b => !['cancelled', 'refused'].includes(b.status));
-    return { units: live.reduce((a, b) => a + b.units, 0), seats: live.reduce((a, b) => a + b.seats, 0) };
+    const kg = live.reduce((a, b) => a + b.units * (UNIT_KG[b.unitKind] || UNIT_KG.sac), 0);
+    return { units: live.reduce((a, b) => a + b.units, 0), seats: live.reduce((a, b) => a + b.seats, 0), kg, maxKg: tripMaxKg(trip), freeKg: Math.max(0, tripMaxKg(trip) - kg) };
   }
-  function tripsState() { if (!state.trips) seedTrips(); return state.trips; }
+  // Nombre d'unités d'un type encore possibles sur ce trajet.
+  const tripRoom = (trip, kind) => Math.floor(tripLoad(trip).freeKg / (UNIT_KG[kind] || UNIT_KG.sac));
+  const TRIP_MAX_DAYS = 7;
+  function validateTrip(trip, d) {
+    const errors = [];
+    if (!TRIP_VEHICLES.includes(d.vehicle)) errors.push({ code: 'tripVehicle' });
+    if (!(trip.depart > Date.now()) || trip.depart > Date.now() + TRIP_MAX_DAYS * 864e5) errors.push({ code: 'tripDate', days: TRIP_MAX_DAYS });
+    const maxPlaces = Math.floor(payloadOf(d.vehicle) / UNIT_KG.sac);
+    if (!(trip.capacity >= 1) || trip.capacity > maxPlaces) errors.push({ code: 'tripCap', max: maxPlaces, kg: payloadOf(d.vehicle) });
+    const maxSeats = (TK.VEH_RULES[d.vehicle] || {}).maxPassengers ?? 2;
+    if (trip.seats > maxSeats) errors.push({ code: 'passengers', n: trip.seats, max: maxSeats });
+    if (!(trip.pricePerUnit > 0)) errors.push({ code: 'tripPrice' });
+    return errors;
+  }
+  // Les trajets de démonstration couvrent toujours cette nuit et demain soir, même le lendemain.
+  function ensureTrips() {
+    const n = new Date(); n.setHours(0, 0, 0, 0);
+    if (new Date().getHours() < 6) n.setDate(n.getDate() - 1);
+    if (!state.trips || state.tripsNight !== n.toDateString()) seedTrips();
+  }
+  function tripsState() { ensureTrips(); return state.trips; }
 
   function seedTrips() {
-    const r = rng('trips' + new Date().toDateString());
-    const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    // Nuits de départ : « cette nuit » commence à 18 h (la veille avant 6 h du matin), « demain soir » la nuit suivante.
+    const night0 = new Date(); night0.setHours(0, 0, 0, 0);
+    if (new Date().getHours() < 6) night0.setDate(night0.getDate() - 1);
+    const r = rng('trips' + night0.toDateString());
+    const day0 = night0;
     const plan = [[21, 30, 'truck10t', 60, 2, 1500, 2000], [22, 15, 'truck3t', 35, 1, 1800, 2500], [23, 0, 'truck10t', 80, 2, 1200, 2000], [0, 20, 'truck3t', 30, 2, 2000, 2500]];
     const trips = [];
     [0, 1].forEach(dd => plan.forEach(([h, m, veh, cap, seats, pu, ps], i) => {
       const d = new Date(day0.getTime() + (dd + (h < 12 ? 1 : 0)) * 864e5); d.setHours(h, m, 0, 0);
       const drv = DRIVER_POOL[(i + dd * 3) % DRIVER_POOL.length];
       const t = {
-        id: `TR-${d.getDate()}${d.getHours()}${i}`, sim: true, driver: drv.name, driverName: drv.name, rating: drv.rating, plate: plateFor(r), vehicle: veh,
+        id: `TR-${d.getMonth() + 1}${String(d.getDate()).padStart(2, '0')}-${dd}${i}`, sim: true, driver: drv.name, driverName: drv.name, rating: drv.rating, plate: plateFor(r), vehicle: veh,
         from: 'bouake', depart: d.getTime(), stops: ['tiebissou', 'yamoussoukro', 'toumodi', 'singrobo', 'ndouci'].filter(() => r() > .2),
         capacity: cap, seats, pricePerUnit: pu, pricePerSeat: ps, bookings: [], status: 'scheduled', createdAt: Date.now()
       };
@@ -702,18 +857,23 @@
       t.bookings.push({ id: t.id + '-x', client: 'Autres commerçantes', stop: t.stops[0], units: taken, seats: Math.min(seats - 1, Math.floor(r() * 2)), status: 'booked', other: true });
       if (d.getTime() > Date.now()) trips.push(t);
     }));
-    state.trips = (state.trips || []).filter(t => !t.sim && t.depart > Date.now() - 864e5).concat(trips);
+    // On garde les trajets simulés déjà réservés et on complète les nuits manquantes.
+    const keep = (state.trips || []).filter(t => (!t.sim && t.depart > Date.now() - 864e5) || (t.sim && t.bookings.some(b => !b.other) && t.depart > Date.now() - 864e5));
+    state.trips = keep.concat(trips.filter(t => !keep.some(k => k.id === t.id)));
+    state.tripsNight = night0.toDateString();
   }
 
   function publishTrip(trip) {
-    const d = drv();
-    if (!d || d.status !== 'approved') return null;
+    const d = activeDrv();
+    if (!d) return { ok: false, errors: [{ code: blockReason(drv()) }] };
+    const errors = validateTrip(trip, d);
+    if (errors.length) return { ok: false, errors };
     const t = Object.assign({ id: 'TR-' + Date.now().toString(36).toUpperCase(), driver: d.phone, driverName: `${d.firstName} ${d.lastName}`, rating: driverRating(d),
       plate: d.plate, vehicle: d.vehicle, from: 'bouake', bookings: [], status: 'scheduled', createdAt: Date.now() }, trip);
     tripsState().unshift(t);
     track('trip_published', null, { tripId: t.id, driver: d.phone, capacity: t.capacity, seats: t.seats, price: t.pricePerUnit, depart: t.depart });
     emit();
-    return t;
+    return { ok: true, trip: t };
   }
 
   // Commission sur la marchandise seulement : les places passagers reviennent entièrement au chauffeur.
@@ -726,7 +886,8 @@
     const trip = tripsState().find(x => x.id === tripId);
     if (!trip || trip.status !== 'scheduled') return { ok: false };
     const load = tripLoad(trip);
-    if (load.units + req.units > trip.capacity || load.seats + req.seats > trip.seats) return { ok: false, full: true };
+    const kg = req.units * (UNIT_KG[req.unitKind] || UNIT_KG.sac);
+    if (!(req.units >= 1) || kg > load.freeKg || load.seats + req.seats > trip.seats) return { ok: false, full: true };
     // Prix proposé par la commerçante : la place est retenue en attendant la réponse du chauffeur.
     const proposed = req.unitPrice && req.unitPrice !== trip.pricePerUnit;
     const q = quoteBooking(trip, req.units, req.seats, req.unitPrice || trip.pricePerUnit);
@@ -745,6 +906,7 @@
   // Réponse du chauffeur à un prix proposé.
   function answerProposal(tripId, bookingId, accept) {
     const [trip, b] = findBooking(tripId, bookingId);
+    if (trip && !trip.sim && !(activeDrv() && activeDrv().phone === trip.driver)) return;
     if (!b || b.status !== 'proposed') return;
     b.status = accept ? 'accepted' : 'refused';
     b.answeredAt = Date.now();
@@ -765,7 +927,7 @@
   function sosAlert(tripId, bookingId) {
     const [trip, b] = findBooking(tripId, bookingId);
     if (!b) return;
-    state.reports.unshift({ at: Date.now(), orderId: tripId, text: `URGENCE · ${b.client || ''} · ${b.phone ? '+225 ' + b.phone : ''} · trajet ${trip.driverName} (${trip.plate})`, phone: b.phone, urgent: true });
+    addReport({ orderId: tripId, trip: true, text: `URGENCE · ${b.client || ''} · ${b.phone ? '+225 ' + b.phone : ''} · trajet ${trip.driverName} (${trip.plate})`, phone: b.phone, urgent: true });
     track('sos', null, { tripId, driver: trip.driver });
     emit();
   }
@@ -776,7 +938,7 @@
     if (!o) return;
     const where = pos ? ` · position https://maps.google.com/?q=${pos.lat},${pos.lon}` : '';
     const dv = o.driver ? ` · ${o.driver.name} (${o.driver.plate})` : '';
-    state.reports.unshift({ at: Date.now(), orderId: o.id, text: `URGENCE ${by === 'driver' ? 'chauffeur' : 'client'} · ${TK.commune(o.from).name} → ${TK.commune(o.to).name}${dv}${where}`,
+    addReport({ orderId: o.id, text: `URGENCE ${by === 'driver' ? 'chauffeur' : 'client'} · ${TK.commune(o.from).name} → ${TK.commune(o.to).name}${dv}${where}`,
       phone: by === 'driver' ? (drv() && drv().phone) : o.clientPhone, urgent: true });
     track('sos', o, { by });
     emit();
@@ -799,6 +961,7 @@
   function advanceTrip(tripId) {
     const trip = tripsState().find(x => x.id === tripId);
     if (!trip) return;
+    if (!trip.sim && !(activeDrv() && activeDrv().phone === trip.driver)) return;
     const i = TRIP_STEPS.indexOf(trip.status);
     if (i < 0 || i >= TRIP_STEPS.length - 1) return;
     trip.status = TRIP_STEPS[i + 1];
@@ -854,6 +1017,7 @@
     const handling = need === 'moving';
     const o = buildOrder({ need, from, to, vehicle: vehicleId, items, weight, service: handling ? 'handling' : 'transport', helpers: 1, floorsFrom: handling ? Math.floor(r() * 3) : 0,
       floorsTo: 0, elevator: false, passengers: Math.floor(r() * 2), payment: pick(TK.PAYMENTS), client: pick(CLIENTS), fromDetail: '', toDetail: '', when: 'now', packing: false, dismantle: false }, 'other');
+    o.weightKg = o.weightKg || Number(String(weight).replace(/[^0-9]/g, '')) || 0;
     o.spawned = true;
     state.orders.unshift(o);
     track('created', o, { price: o.price, reference: o.reference, service: o.service, passengers: o.passengers });
@@ -878,16 +1042,21 @@
   function driverLogout() { if (drv() && drv().online) setOnline(false); state.driverSession = null; emit(); }
   function reviewDriver(phone, ok, reason) {
     const d = state.driverAccounts[phone];
-    if (!d) return;
+    if (!d) return { ok: false };
+    // Validation seulement si chaque document obligatoire est fourni, vérifié et non expiré.
+    if (ok && REQUIRED_DOCS.some(k => docState(d, k) !== 'verified')) return { ok: false, missing: REQUIRED_DOCS.filter(k => docState(d, k) !== 'verified') };
     d.status = ok ? 'approved' : 'rejected';
     d.reviewedAt = Date.now();
     d.rejectReason = ok ? '' : (reason || '');
+    if (!ok && d.online) setOnlineFor(d, false);
     emit();
+    return { ok: true };
   }
+  function setOnlineFor(d, on) { d.online = on; const ss = d.sessions || []; if (!on && ss.length && !ss[ss.length - 1].to) ss[ss.length - 1].to = Date.now(); }
   function addLead(lead) { state.leads.push(Object.assign({ at: Date.now() }, lead)); emit(); }
 
   load();
-  if (!state.trips || !state.trips.some(t => t.sim && t.depart > Date.now())) seedTrips();
+  ensureTrips();
   applyPricing();
 
   window.TK = Object.assign(window.TK || {}, {
@@ -896,6 +1065,8 @@
       subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
       set, setDriver, addLead, createOrder, getOrder, visibleOffers, driverOffer, chooseOffer,
       advance, confirmDelivery, repropose, submitDeliveryCode, faceCheck, orderSos, rateClient, clientRatingOf,
+      validateDraft, activeDrv, blockReason, docState, docsBlocking, reviewDoc, updateDoc, REQUIRED_DOCS, DOC_EXPIRY, takeReport,
+      UNIT_KG, tripRoom, tripMaxKg, validateTrip, TRIP_VEHICLES, payloadOf,
       addRecurring, toggleRecurring, removeRecurring, runRecurring, myRecurring, nextOccurrence,
       setBusiness, addMember, removeMember, driverCode, findDriverByCode, referrals, REF_TRIPS, CODE_TRIES, END_PHOTOS_MIN, RECHARGE_MIN, cancelInfo, cancelOrder, rate, addPhotos, report, recharge, tick, reset,
       user, account, register, login, logout, updateUser,

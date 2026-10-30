@@ -12,6 +12,14 @@ Site web et application (PWA installable) de **Takaata**, plateforme de transpor
 
 Les règles viennent du business plan V3 : prix = max(plancher ; base + km × tarif) + options, commission 15 %, annulation gratuite avant attribution et pendant 5 minutes.
 
+## Contrôles « serveur » (dans `js/store.js`, refaits à chaque action)
+
+- Capacité réelle du véhicule à la publication et à l'acceptation : poids, volume, plus grand objet, passagers, distance (`TK.checkLoad`), et une seule course à la fois par chauffeur.
+- Trajets vivriers : capacité en sacs de 50 kg plafonnée par la charge utile ; réservations comptées en kg (sac 50, carton 20, cageot 25).
+- Chauffeur suspendu, dossier non validé ou document manquant / refusé / expiré : aucune action possible, y compris dans un onglet déjà ouvert.
+- Documents : manquant, fourni (à vérifier), vérifié, refusé, expiré. Une date seule ne vaut pas preuve ; la validation du dossier exige chaque document vérifié.
+- Signalements : ouvert → en cours → résolu, avec décision tracée (livraison validée, annulation, remboursement, sans suite).
+
 ## Prototype
 
 Les données sont stockées dans le navigateur (`localStorage`) et les chauffeurs et clients sont simulés. Prochaine étape : un backend Firebase (comptes par téléphone + OTP, Firestore, notifications), Google Maps et CinetPay pour le Mobile Money. La reconnaissance faciale est simulée : au lancement, un fournisseur spécialisé (par exemple Smile ID) comparera les visages.

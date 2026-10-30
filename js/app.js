@@ -180,8 +180,10 @@
       const handling = d.service === 'handling';
       const spec = V().SPECS[d.vehicle];
       const est = estimatedKg(d), kg = loadKg(d);
-      const over = kg > spec.payloadKg;
-      const bigger = VEHICLES.find(v => V().SPECS[v.id].payloadKg >= kg);
+      // Contrôle complet : poids, volume, plus grand objet, passagers, distance (refait par le serveur à la publication).
+      const chk = TK.checkLoad(Object.assign({}, d, { km: kmVal }), d.vehicle, kmVal);
+      const over = !chk.ok;
+      const bigger = over ? TK.vehicleFor(Object.assign({}, d, { km: kmVal }), kmVal) : null;
       const svc = kind => `
         <label class="svc-card${d.service === kind ? ' is-on' : ''}">
           <input type="radio" name="service" id="w-svc-${kind}" value="${kind}" data-bind="service"${d.service === kind ? ' checked' : ''}>
@@ -249,8 +251,9 @@
           </div>
           <div class="weight-bar" aria-hidden="true"><i style="width:${Math.min(100, Math.round(kg / spec.payloadKg * 100))}%"></i></div>
           <p class="hint">${esc(est ? t('w.weightCalc', { p: spec.payload }) : t('w.weightEmpty'))}</p>
-          ${over ? `<p class="field-error">${esc(t('w.tooHeavy', { p: spec.payload }))}</p>
-            ${bigger ? `<button type="button" class="btn btn-ghost btn-sm" data-act="upsize" data-v="${bigger.id}">${esc(t('w.switchTo', { v: t('veh.' + bigger.id) }))}</button>` : ''}` : ''}
+          ${chk.volume ? `<p class="hint">${esc(t('cap.volume2', { v: String(chk.volume).replace('.', ','), m: String(chk.usable).replace('.', ',') }))}</p>` : ''}
+          ${over ? `<ul class="cap-errors" role="alert">${chk.errors.map(e => `<li>${esc(capMsg(e))}</li>`).join('')}</ul>
+            ${bigger && bigger.id !== d.vehicle ? `<button type="button" class="btn btn-ghost btn-sm" data-act="upsize" data-v="${bigger.id}">${esc(t('w.switchTo', { v: t('veh.' + bigger.id) }))}</button>` : `<p class="hint">${esc(t('cap.split'))}</p>`}` : ''}
           <label class="field field-inline"><span>${esc(t('w.weightFix'))}</span>
             <input id="w-weightManual" type="number" inputmode="numeric" min="0" step="10" data-bind="weightManual" value="${esc(d.weightManual || '')}" placeholder="kg" class="weight-input">
           </label>
@@ -296,7 +299,8 @@
           <label class="chip-radio"><input type="radio" name="when" id="w-when-later" value="later" data-bind="when"${d.when === 'later' ? ' checked' : ''}><span>${esc(t('w.later'))}</span></label>
           <label class="chip-radio"><input type="radio" name="when" id="w-when-weekly" value="weekly" data-bind="when"${d.when === 'weekly' ? ' checked' : ''}><span>${esc(t('rc.weekly'))}</span></label>
         </fieldset>
-        ${d.when === 'later' ? `<label class="field"><span class="sr-only">${esc(t('w.later'))}</span><input type="datetime-local" id="w-whenAt" data-bind="whenAt" value="${esc(d.whenAt)}"></label>` : ''}
+        ${d.when === 'later' ? `<label class="field"><span class="sr-only">${esc(t('w.later'))}</span><input type="datetime-local" id="w-whenAt" data-bind="whenAt" value="${esc(d.whenAt)}" min="${localInput(Date.now() + 15 * 6e4)}" max="${localInput(Date.now() + 30 * 864e5)}"></label>
+        <p class="hint">${esc(t('dt.planHint'))}</p>` : ''}
         ${d.when === 'weekly' ? weeklyPicker(d) : ''}
         <fieldset class="chips"><legend>${esc(t('w.payment'))}</legend>
           ${payChoices().map(p => `<label class="chip-radio"><input type="radio" name="payment" id="w-pay-${p}" value="${p}" data-bind="payment"${d.payment === p ? ' checked' : ''}><span>${esc(t('pay.' + p))}</span></label>`).join('')}
@@ -502,6 +506,7 @@
         </div>
         <button class="listen-btn" type="button" data-act="listen" data-id="${o.id}">🔊 ${esc(t('vo.listen'))}</button>
         <p class="sub">${esc(t('need.' + o.need))} · ${esc(t('veh.' + o.vehicle))} · <span class="mono">${ui.km(o.km)}</span></p>
+        ${o.when === 'later' && o.whenAt ? `<p class="plan-tag">📅 ${esc(t('dt.planned', { d: dayLabel(new Date(o.whenAt).getTime()), h: hm(new Date(o.whenAt).getTime()) }))}</p>` : ''}
         <div class="map-card">${ui.routeMap(o.from, o.to, progress)}</div>
         ${main}
       </section>`;
@@ -876,7 +881,7 @@
           <label class="field"><span>${esc(t('me.write'))}</span><textarea id="supportText" rows="3" required placeholder="${esc(t('me.writePh'))}"></textarea></label>
           <button class="btn btn-signal btn-sm" type="submit">${esc(t('t.send'))}</button>
         </form>`}
-        ${msgs.length ? `<h2 class="app-h">${esc(t('me.myMsgs'))}</h2><ol class="ledger-list">${msgs.map(r => `<li><span><b>${esc(r.orderId || t('me.m.support'))}</b><small>${esc(r.text)}</small></span><span class="mono">${date(r.at)}</span></li>`).join('')}</ol>` : ''}
+        ${msgs.length ? `<h2 class="app-h">${esc(t('me.myMsgs'))}</h2><ol class="ledger-list">${msgs.map(r => `<li><span><b>${esc(r.orderId || t('me.m.support'))}</b><small>${esc(r.text)}</small>${r.status === 'resolved' ? `<small>✓ ${esc(t('rp.o.' + (r.outcome || 'closed')))}${r.note ? ' · ' + esc(r.note) : ''}</small>` : ''}</span><span><span class="pill pill-${r.status === 'resolved' ? 'delivered' : r.status === 'progress' ? 'assigned' : 'open'}">${esc(t('rp.st.' + (r.status || 'open')))}</span> <span class="mono">${date(r.at)}</span></span></li>`).join('')}</ol>` : ''}
       </section>`;
     }
     if (sub === 'invite') {
@@ -1065,7 +1070,7 @@
 
   const LICENSE_FOR = { tricycle: ['A', 'B'], van1t: ['B', 'C'], truck3t: ['C'], truck10t: ['C'] };
   const LICENSE_CATS = ['A', 'B', 'C', 'D', 'E'];
-  const DOCS_BY_STEP = { license: ['idFront', 'idBack', 'selfie', 'license'], vehicle: ['regCard', 'insurance', 'vehicleFront', 'vehicleCargo'] };
+  const DOCS_BY_STEP = { license: ['idFront', 'idBack', 'selfie', 'license'], vehicle: ['regCard', 'insurance', 'inspection', 'vehicleFront', 'vehicleCargo'] };
   const SIGNUP_STEPS = ['id', 'license', 'vehicle', 'payout', 'review'];
   const PLATE_RE = /^\d{1,4}\s?[A-Z]{2}\s?\d{2}$/i;
   const net = o => o.price - commission(o.price, o.optionsPrice);
@@ -1295,6 +1300,10 @@
 
   function driverApp() {
     const d = store.driver();
+    // Compte suspendu : plus aucune action possible (y compris une session déjà ouverte), seul « Moi » reste accessible.
+    if (d.suspended && view.dtab !== 'me') return `<section class="app-sec"><div class="review-card is-ko"><span class="pill pill-cancelled">${esc(t('ad.suspended1'))}</span>
+      <h1 class="app-title">${esc(t('sp.title'))}</h1><p>${esc(t('sp.text'))}</p>
+      <button class="btn btn-ghost btn-sm" type="button" data-act="dtab" data-tab="me">${esc(t('dm.support'))}</button></div></section>`;
     if (view.dtab === 'gains') return driverGains(d);
     if (view.dtab === 'me') return driverMe(d);
     return driverJobs(d);
@@ -1415,9 +1424,11 @@
     const avail = store.available();
     // Course en cours : l'écran ne montre que la navigation et l'action suivante.
     if (mineActive.length) return courseNav(mineActive[0]);
+    const blockedDocs = store.docsBlocking(d);
     const toRate = view.rateClientFor && store.getOrder(view.rateClientFor);
     return `
       ${toRate && toRate.status === 'delivered' && !toRate.clientRating ? clientRateCard(toRate) : ''}
+      ${blockedDocs.length ? `<p class="wallet-alert is-ko">${esc(t('dc2.blocked', { d: blockedDocs.map(docLabel).join(', ') }))} <button type="button" class="link-btn" data-act="dme-doc">${esc(t('dc2.fix'))} ›</button></p>` : ''}
       ${driverHero(d, open.filter(o => o.vehicle === d.vehicle))}
       ${avail < BALANCE_ALERTS[0] ? `<p class="wallet-alert${avail < BALANCE_ALERTS[1] ? ' is-ko' : ''}">${esc(t(avail < BALANCE_ALERTS[1] ? 'nt.low2' : 'nt.low1', { p: fcfa(avail) }))} <button type="button" class="link-btn" data-act="dtab" data-tab="gains">${esc(t('dj.lowGo'))} ›</button></p>` : ''}
       ${d.online && notifState() === 'default' ? `<div class="notif-hint"><span>${esc(t('nt.enableS'))}</span><button class="btn btn-light btn-sm" type="button" data-act="nt-enable">${esc(t('nt.enable'))}</button></div>` : ''}
@@ -1474,7 +1485,9 @@
     const sub = view.dmeSub || '';
     const back = `<button class="link-btn" type="button" data-act="dme-sub" data-sub="">← ${esc(t('dn.me'))}</button>`;
     const longDate = iso => new Date(iso).toLocaleDateString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    if (sub === 'docs') {
+    if (sub === 'docs') return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.docs'))}</h1>
+        ${docsList(d, 'driver')}<p class="hint">${esc(t('dc2.driverNote'))}</p></section>`;
+    if (sub === 'docsOld') {
       const docRow = (label, iso) => { const [k, cls] = docStatus(iso); return `<li><span><b>${esc(label)}</b>${iso ? `<small>${esc(t('dm.until', { d: longDate(iso) }))}</small>` : ''}</span>${k ? `<span class="pill pill-${cls}">${esc(t(k))}</span>` : ''}</li>`; };
       return `<section class="app-sec">${back}<h1 class="app-title">${esc(t('dm.docs'))}</h1>
         <ol class="ledger-list">
@@ -1572,6 +1585,7 @@
           <div class="earn-net earn-only"><small>${esc(t('dj.net'))}</small><b class="mono">${fcfa(net(o))}</b></div>
         </div>
         <p class="request-items">${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''}${(o.itemPhotos || []).length ? ` · 📷 ${o.itemPhotos.length}` : ''}${o.voice ? ' · 🎤' : ''}</p>
+        ${o.when === 'later' && o.whenAt ? `<p class="plan-tag">📅 ${esc(t('dt.planned', { d: dayLabel(new Date(o.whenAt).getTime()), h: hm(new Date(o.whenAt).getTime()) }))}</p>` : ''}
       </button>`;
   }
 
@@ -1585,6 +1599,7 @@
     const left = Math.max(0, Math.ceil((view.reqFullUntil - Date.now()) / 1000));
     const msg = view.offerMsg[o.id];
     const sameVehicle = o.vehicle === d.vehicle;
+    const fit = TK.checkLoad(o, d.vehicle, o.km);
     return `<div class="full-ov req-full" role="dialog" aria-modal="true" aria-label="${esc(t('rf.title'))}">
       <div class="full-map">${ui.routeMap(o.from, o.to, null)}</div>
       <button type="button" class="ov-x full-x" data-act="rf-close" aria-label="${esc(t('md.close'))}">✕</button>
@@ -1600,7 +1615,8 @@
         <p class="request-meta">${esc(o.owner === 'me' ? t('role.client') : o.client || '')}${clientBadge(o)}</p>
         <p class="request-meta"><span class="mono">${ui.km(o.km)}</span> · ${esc(o.items || '—')}${o.weight ? ` · ${esc(o.weight)}` : ''} · ${esc(t(o.service === 'handling' ? 'svc.handling' : 'svc.transport'))}${o.service === 'handling' ? ` (${o.helpers})` : ''} · ${esc(t('pay.' + o.payment))}</p>
         ${clientMedia(o)}
-        ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : `
+        ${o.when === 'later' && o.whenAt ? `<p class="plan-tag">📅 ${esc(t('dt.planned', { d: dayLabel(new Date(o.whenAt).getTime()), h: hm(new Date(o.whenAt).getTime()) }))}</p>` : ''}
+        ${!sameVehicle ? `<p class="hint">${esc(t('d.wrongVehicle', { v: t('veh.' + o.vehicle) }))}</p>` : !fit.ok ? `<ul class="cap-errors">${fit.errors.map(e => `<li>${esc(capMsg(e))}</li>`).join('')}</ul><p class="hint">${esc(t('cap.driverNo'))}</p>` : `
         ${avail < c ? `<p class="field-error">${esc(t('d.need', { m: fcfa(c - avail) }))}</p>` : ''}
         ${msg ? `<p class="field-error">${esc(msg)}</p>` : ''}
         <button class="btn btn-signal btn-block btn-xl" type="button" data-act="d-accept" data-id="${o.id}"${avail < c ? ' disabled' : ''}>${esc(t('d.accept', { p: fcfa(net(o)) }))}</button>
@@ -1662,6 +1678,7 @@
       <div class="nav-map${locked ? ' is-locked' : ''}">${locked ? `<p>◉ ${esc(t('nv.lockedS'))}</p>` : ui.routeMap(o.from, o.to, PROGRESS[o.status])}</div>
       <div class="nav-sheet">
         <div class="request-top"><div><b>${route(o)}</b><small>${esc(t('d.client'))} : ${esc(o.owner === 'me' ? t('role.client') : o.client || '')} · ${esc(t('dj.net'))} <span class="mono">${fcfa(net(o))}</span></small></div>${pill(o.status)}</div>
+        ${!store.activeDrv() ? `<p class="notice notice-ko">${esc(t('blk.course'))}</p>` : ''}
         ${callBlock(o, 'driver')}
         ${safetyBar(o, 'driver')}
         ${o.status === 'pickup' ? `<div class="code-box code-box-driver">
@@ -1825,7 +1842,7 @@
   ];
   if (!view.adm) view.adm = { period: 30, mod: 'dash', filter: 'all', q: '', order: null, driver: null, client: null, dtab: 'pending', reason: 'ad.r1' };
 
-  const isDispute = o => o.disputed && o.status === 'arrived';
+  const isDispute = o => !!o.disputed && !['delivered', 'cancelled'].includes(o.status);
   const clientName = o => {
     if (o.owner !== 'me') return o.client || '—';
     const u = store.account(o.clientPhone);
@@ -1890,20 +1907,39 @@
     const today = os.filter(o => o.createdAt >= today0());
     const delivered = os.filter(o => o.status === 'delivered');
     const drivers = Object.values(s.driverAccounts);
+    const openR = s.reports.filter(r => r.status !== 'resolved');
     const todo = [
+      [openR.filter(r => r.type === 'sos').length, 'ad.todoSos', 'support'],
+      [openR.filter(r => r.type === 'dispute').length, 'ad.todoDisputes', 'support'],
+      [openR.filter(r => r.type === 'message').length, 'ad.todoMsgs', 'support'],
       [drivers.filter(d => d.status === 'pending').length, 'ad.todoDrivers', 'drivers'],
-      [s.reports.filter(r => !r.resolved).length, 'ad.todoDisputes', 'support'],
-      [os.filter(o => o.status === 'open').length, 'ad.todoOpen', 'orders']
+      [os.filter(o => o.status === 'open' && Date.now() - o.createdAt > 10 * 6e4).length, 'ad.todoLate', 'orders'],
+      [drivers.filter(d => d.status === 'approved' && store.docsBlocking(d).length).length, 'ad.todoDocs', 'drivers']
     ].filter(([n]) => n);
+    // Indicateurs du jour : tous calculés sur les commandes créées aujourd'hui.
+    const avg = arr => arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : null;
+    const assignMin = avg(today.filter(o => o.timeline.assigned).map(o => (o.timeline.assigned - o.createdAt) / 6e4));
+    const tripMin = avg(today.filter(o => o.timeline.delivered && o.timeline.assigned).map(o => (o.timeline.delivered - o.timeline.assigned) / 6e4));
+    const todayDone = today.filter(o => o.status === 'delivered'), todayCancel = today.filter(o => o.status === 'cancelled');
+    const decided = todayDone.length + todayCancel.length;
+    const online = drivers.filter(d => d.online && !d.suspended && d.status === 'approved').length;
     return `
+      <h2 class="app-h">${esc(t('ad.kToday'))}</h2>
       <div class="adm-tiles">
         ${tile(t('ad.today'), fmt(today.length))}
         ${tile(t('ad.active'), fmt(os.filter(o => ['assigned', 'pickup', 'loading', 'transit', 'arrived'].includes(o.status)).length))}
+        ${tile(t('ad.kDone'), fmt(todayDone.length), '', 'ok')}
+        ${tile(t('ad.kCancel'), decided ? pctStr(todayCancel.length / decided) : '—', `${todayCancel.length} / ${decided}`, todayCancel.length ? 'ko' : '')}
+        ${tile(t('ad.kAssign'), assignMin != null ? (assignMin < 1 ? '< 1 min' : `${Math.round(assignMin)} min`) : '—')}
+        ${tile(t('ad.kTrip'), tripMin != null ? (tripMin < 1 ? '< 1 min' : `${Math.round(tripMin)} min`) : '—')}
+        ${tile(t('ad.kOpenR'), fmt(openR.length), openR.filter(r => r.type === 'sos').length ? t('ad.kSos', { n: openR.filter(r => r.type === 'sos').length }) : '', openR.length ? 'ko' : 'ok')}
+        ${tile(t('ad.online'), `${online} / ${drivers.filter(d => d.status === 'approved' && !d.suspended).length}`)}
+      </div>
+      <h2 class="app-h">${esc(t('ad.kTotal'))}</h2>
+      <div class="adm-tiles">
         ${tile(t('ad.delivered'), fmt(delivered.length), '', 'ok')}
-        ${tile(t('ad.cancelled'), fmt(os.filter(o => o.status === 'cancelled').length), '', 'ko')}
         ${tile(t('ad.gmv'), fcfa(delivered.reduce((x, o) => x + o.price, 0)))}
         ${tile(t('ad.comm'), fcfa(delivered.reduce((x, o) => x + (o.commission || 0), 0)), '', 'accent')}
-        ${tile(t('ad.online'), `${drivers.filter(d => d.online).length} / ${drivers.filter(d => d.status === 'approved').length}`)}
         ${tile(t('ad.registered'), fmt(Object.keys(s.accounts).length))}
       </div>
       <div class="adm-grid2">
@@ -1989,20 +2025,32 @@
       </table></div>` : `<p class="empty">${esc(t('ad.none'))}</p>`}`;
   }
 
+  // Litiges et support : filtres, prise en charge, décision tracée, délai de traitement.
+  const RP_FILTERS = { open: r => r.status !== 'resolved', sos: r => r.type === 'sos' && r.status !== 'resolved', dispute: r => r.type === 'dispute' && r.status !== 'resolved', message: r => r.type === 'message' && r.status !== 'resolved', resolved: r => r.status === 'resolved' };
+  const OUTCOMES = ['validate', 'cancel', 'refund', 'closed'];
+  const ago = ms => { const m = Math.round(ms / 6e4); return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${Math.floor(m / 1440)} j`; };
   function admSupport() {
-    const s = store.state;
+    const s = store.state, a = view.adm;
+    a.rpf = a.rpf || 'open';
     if (!s.reports.length) return `<p class="empty">${esc(t('ad.noReports'))}</p>`;
-    return `<ol class="adm-list">${s.reports.map(r => {
-      const o = r.orderId && store.getOrder(r.orderId);
-      return `<li class="adm-card adm-report${r.resolved ? ' is-done' : ''}${r.urgent ? ' is-urgent' : ''}">
-        <div class="adm-report-top"><span class="pill pill-${r.resolved ? 'delivered' : 'open'}">${esc(t(r.resolved ? 'ad.resolved1' : 'ad.open1'))}</span>
-          ${o ? `<button type="button" class="link-btn mono" data-act="adm-order" data-id="${o.id}">${esc(o.id)} · ${route(o)}</button>` : ''}<span class="mono adm-date">${dt(r.at)}</span></div>
+    const list = s.reports.filter(RP_FILTERS[a.rpf]);
+    return `<div class="tag-row adm-chips">${Object.keys(RP_FILTERS).map(k => `<button type="button" class="tag${a.rpf === k ? ' is-on' : ''}" data-act="rp-filter" data-f="${k}">${esc(t('rp.f.' + k))} <span class="mono">${s.reports.filter(RP_FILTERS[k]).length}</span></button>`).join('')}</div>
+      ${list.length ? `<ol class="adm-list">${list.map(r => {
+      const o = r.orderId && !r.trip && store.getOrder(r.orderId);
+      const cls = r.status === 'resolved' ? 'delivered' : r.status === 'progress' ? 'assigned' : 'open';
+      return `<li class="adm-card adm-report${r.status === 'resolved' ? ' is-done' : ''}${r.type === 'sos' ? ' is-urgent' : ''}">
+        <div class="adm-report-top"><span class="pill pill-${cls}">${esc(t('rp.st.' + r.status))}</span><span class="pill">${esc(t('rp.t.' + r.type))}</span>
+          ${o ? `<button type="button" class="link-btn mono" data-act="adm-order" data-id="${o.id}">${esc(o.id)} · ${route(o)}</button>` : ''}<span class="mono adm-date">${dt(r.at)} · ${esc(r.id)}</span></div>
         <p>${esc(r.text)}</p>
-        <div class="btn-row">
-          ${o && o.status === 'arrived' ? `<button class="btn btn-signal btn-sm" type="button" data-act="support-close" data-id="${o.id}">${esc(t('ad.validate'))}</button>` : ''}
-          ${r.resolved ? '' : `<button class="btn btn-ghost btn-sm" type="button" data-act="adm-resolve" data-at="${r.at}">${esc(t('ad.resolve'))}</button>`}
-        </div></li>`;
-    }).join('')}</ol>`;
+        ${r.status === 'resolved' ? `<p class="hint">✓ ${esc(t('rp.o.' + (r.outcome || 'closed')))}${r.note ? ` · ${esc(r.note)}` : ''} · ${esc(t('rp.in', { d: ago((r.resolvedAt || r.at) - r.at) }))}</p>` : `
+        <p class="hint">${esc(t('rp.waiting', { d: ago(Date.now() - r.at) }))}${r.takenAt ? ' · ' + esc(t('rp.taken', { d: dt(r.takenAt) })) : ''}</p>
+        ${r.status === 'open' ? `<button class="btn btn-ghost btn-sm" type="button" data-act="rp-take" data-id="${r.id}">${esc(t('rp.take'))}</button>` : `
+        <form class="rp-form" data-id="${r.id}" novalidate>
+          <label class="field field-inline"><span>${esc(t('rp.decision'))}</span><select id="rp-out-${r.id}">${OUTCOMES.filter(k => o || k === 'closed').filter(k => k !== 'validate' || (o && o.status === 'arrived')).filter(k => k !== 'cancel' || (o && !['delivered', 'cancelled'].includes(o.status))).map(k => `<option value="${k}">${esc(t('rp.o.' + k))}</option>`).join('')}</select></label>
+          <label class="field"><span>${esc(t('rp.note'))}</span><input id="rp-note-${r.id}" placeholder="${esc(t('rp.notePh'))}"></label>
+          <button class="btn btn-signal btn-sm" type="submit">${esc(t('rp.resolve'))}</button>
+        </form>`}`}</li>`;
+    }).join('')}</ol>` : `<p class="empty">${esc(t('ad.nothing'))}</p>`}`;
   }
 
   function admPricing() {
@@ -2062,15 +2110,13 @@
         ${kv([[t('ad.col.phone'), `<span class="mono">${esc(fmtPhone(d.phone))}</span>`], [t('da.birth'), esc(t('da.age', { n: ageOf(d.birth) }))],
           [t('da.idType'), `${esc(t('da.' + d.idType))} · <span class="mono">${esc(d.idNumber)}</span>`], [t('da.commune'), esc(commune(d.commune).name)]])}
         <h3 class="app-h">${esc(t('ad.docs'))}</h3>
-        ${kv([docRow(t('da.idFront') + ' / ' + t('da.idBack'), (d.docs.idFront || 0) + (d.docs.idBack || 0)), docRow(t('da.selfie'), d.docs.selfie),
-          docRow(`${t('da.license')} · ${d.licenseCats.join(', ')}`, d.docs.license, d.licenseExp), docRow(t('da.regCard'), d.docs.regCard),
-          docRow(t('da.insurance'), d.docs.insurance, d.insuranceExp), docRow(t('dm.inspection'), 0, d.inspectionExp),
-          docRow(t('da.vehicleFront') + ' / ' + t('da.vehicleCargo'), (d.docs.vehicleFront || 0) + (d.docs.vehicleCargo || 0))])}
+        ${docsList(d, 'admin')}
         <h3 class="app-h">${esc(t('ad.vehicle'))}</h3>
         ${kv([[t('da.vehType'), esc(t('veh.' + d.vehicle))], [t('da.plate'), `<span class="plate mono">${esc(d.plate)}</span>`], [t('da.brand'), `${esc(d.brand)} · ${esc(d.year)}`],
           [t('ad.payout'), `${esc(t('pay.' + d.payOp))} · <span class="mono">${esc(fmtPhone(d.payPhone))}</span>`]])}
         ${d.status === 'pending' ? `<div class="adm-actions">
-          <button class="btn btn-signal btn-sm" type="button" data-act="adm-approve" data-phone="${d.phone}">${esc(t('ad.approve'))}</button>
+          <button class="btn btn-signal btn-sm" type="button" data-act="adm-approve" data-phone="${d.phone}"${store.REQUIRED_DOCS.every(k => store.docState(d, k) === 'verified') ? '' : ' disabled'}>${esc(t('ad.approve'))}</button>
+          ${store.REQUIRED_DOCS.every(k => store.docState(d, k) === 'verified') ? '' : `<p class="hint">${esc(t('dc2.approveNeed'))}</p>`}
           <label class="field field-inline"><span>${esc(t('ad.rejectReason'))}</span><select id="adm-reason">${['ad.r1', 'ad.r2', 'ad.r3', 'ad.r4'].map(k => `<option value="${k}"${a.reason === k ? ' selected' : ''}>${esc(t(k))}</option>`).join('')}</select></label>
           <button class="btn btn-ghost btn-sm" type="button" data-act="adm-reject" data-phone="${d.phone}">${esc(t('ad.reject'))}</button></div>` : ''}
         ${d.status === 'approved' ? `<div class="btn-row"><button class="btn ${d.suspended ? 'btn-signal' : 'btn-danger'} btn-sm" type="button" data-act="adm-suspend" data-phone="${d.phone}">${esc(t(d.suspended ? 'ad.unsuspend' : 'ad.suspend'))}</button></div>` : ''}`;
@@ -2758,7 +2804,7 @@
     const [a, b] = nightRange(v.night);
     const trips = store.tripsState().filter(tr => tr.status === 'scheduled' && tr.depart >= a && tr.depart < b && (tr.from === v.stop || tr.stops.includes(v.stop)) && v.stop !== 'gesco')
       .map(tr => ({ tr, at: store.stopTime(tr, v.stop), load: store.tripLoad(tr) }))
-      .filter(x => x.at > Date.now() && x.load.units + v.units <= x.tr.capacity && x.load.seats + v.seats <= x.tr.seats)
+      .filter(x => x.at > Date.now() && store.tripRoom(x.tr, v.kind) >= v.units && x.load.seats + v.seats <= x.tr.seats)
       .sort((x, y) => store.arrivalTime(x.tr) - store.arrivalTime(y.tr));
     if (v.confirm) return vivConfirm(v);
     return `
@@ -2792,7 +2838,7 @@
               <li><b class="mono">${hm(at)}</b><span>${esc(t('vv.passes', { s: store.stopOf(v.stop).name, h: hm(at) }))}</span></li>
               <li><b class="mono">${hm(arr)}</b><span>${esc(t('vv.arrives', { h: hm(arr) }))}</span></li>
             </ol>
-            <p class="hint">${esc(t('vv.left', { u: tr.capacity - load.units, s: tr.seats - load.seats }))} · ${esc(t('vv.perUnit', { p: fcfa(tr.pricePerUnit) }))} · ${esc(t('vv.perSeat', { p: fcfa(tr.pricePerSeat) }))}</p>
+            <p class="hint">${esc(t('vv.leftKind', { u: store.tripRoom(tr, v.kind), k: t('vv.' + v.kind).toLowerCase(), s: tr.seats - load.seats }))} · ${esc(t('vv.perUnit', { p: fcfa(tr.pricePerUnit) }))} · ${esc(t('vv.perSeat', { p: fcfa(tr.pricePerSeat) }))}</p>
             <div class="truck-foot"><span>${esc(t('vv.total'))} <b class="mono">${fcfa(q.total)}</b></span>
               <div class="btn-row">
                 <button class="btn btn-ghost btn-sm" type="button" data-act="vv-prop-open" data-id="${tr.id}">${esc(t('vv.propose'))}</button>
@@ -2930,12 +2976,13 @@
     return `<section class="app-sec viv-driver">
       <div class="viv-intro"><b>${esc(t('vv.dTitle'))}</b><p>${esc(t('vv.dLead'))}</p><span class="pill">${esc(t('vv.axis'))}</span></div>
       ${f ? `<form class="auth-form" id="dTripForm" novalidate>
-          <label class="field"><span>${esc(t('vv.dDepart'))}</span><input id="tf-depart" type="datetime-local" value="${esc(f.depart || nextHour())}"></label>
+          ${!store.TRIP_VEHICLES.includes(d.vehicle) ? `<p class="notice">${esc(t('cap.tripVehicle'))}</p>` : ''}
+          <label class="field"><span>${esc(t('vv.dDepart'))}</span><input id="tf-depart" type="datetime-local" value="${esc(f.depart || nextHour())}" min="${localInput(Date.now())}" max="${localInput(Date.now() + 7 * 864e5)}"></label>
           <fieldset class="chips"><legend>${esc(t('vv.dStops'))}</legend>
             ${STOPS().filter(s => !['bouake', 'gesco'].includes(s.id)).map(s => `<label class="chip-radio"><input type="checkbox" data-tstop="${s.id}"${(f.stops || ['yamoussoukro', 'toumodi']).includes(s.id) ? ' checked' : ''}><span>${esc(s.name)}</span></label>`).join('')}
           </fieldset>
           <div class="row-2">
-            <label class="field"><span>${esc(t('vv.dCap'))}</span><input id="tf-cap" type="number" inputmode="numeric" min="1" value="${esc(f.capacity || 40)}"></label>
+            <label class="field"><span>${esc(t('vv.dCap2', { m: Math.floor(store.payloadOf(d.vehicle) / store.UNIT_KG.sac) }))}</span><input id="tf-cap" type="number" inputmode="numeric" min="1" max="${Math.floor(store.payloadOf(d.vehicle) / store.UNIT_KG.sac)}" value="${esc(f.capacity || Math.min(40, Math.floor(store.payloadOf(d.vehicle) / store.UNIT_KG.sac)))}"></label>
             <label class="field"><span>${esc(t('vv.dSeats'))}</span><select id="tf-seats">${[0, 1, 2].map(n => `<option${n === (f.seats ?? 2) ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
             <label class="field"><span>${esc(t('vv.dPrice'))}</span><input id="tf-price" type="number" inputmode="numeric" min="100" step="100" value="${esc(f.pricePerUnit || 1500)}"></label>
             <label class="field"><span>${esc(t('vv.dSeatPrice'))}</span><input id="tf-seatPrice" type="number" inputmode="numeric" min="0" step="100" value="${esc(f.pricePerSeat || 2000)}"></label>
@@ -2951,8 +2998,8 @@
         return `<article class="request request-active">
           <div class="request-top"><div><b>${dayLabel(tr.depart)} · ${hm(tr.depart)} → ${hm(store.arrivalTime(tr))}</b><small>${tr.stops.map(id => esc(store.stopOf(id).name)).join(' · ')}</small></div>
             <span class="pill pill-${tr.status === 'scheduled' ? 'open' : 'delivered'}">${esc(t('vv.tl.' + (tr.status === 'scheduled' ? 'booked' : tr.status)))}</span></div>
-          <div class="weight-bar" aria-hidden="true"><i style="width:${Math.round(load.units / tr.capacity * 100)}%"></i></div>
-          <p class="hint">${esc(t('vv.dFill', { p: pctStr(load.units / tr.capacity) }))} · ${load.units}/${tr.capacity} · ${load.seats}/${tr.seats} pers. · ${esc(t('vv.dNet', { p: fcfa(gross), n: fcfa(gross - fees) }))}</p>
+          <div class="weight-bar" aria-hidden="true"><i style="width:${Math.round(load.kg / load.maxKg * 100)}%"></i></div>
+          <p class="hint">${esc(t('vv.dFill', { p: pctStr(load.kg / load.maxKg) }))} · ${fmt(load.kg)} / ${fmt(load.maxKg)} kg · ${load.seats}/${tr.seats} pers. · ${esc(t('vv.dNet', { p: fcfa(gross), n: fcfa(gross - fees) }))}</p>
           ${props.length ? `<h3 class="app-h">${esc(t('vv.dProps'))}</h3><ul class="ledger-list">${props.map(b => `<li><span><b>${esc(b.client)}</b><small>${esc(store.stopOf(b.stop).name)} · ${b.units} × ${esc(t('vv.' + b.unitKind))} · ${esc(t('vv.dProp', { p: fcfa(b.unitPrice), q: fcfa(tr.pricePerUnit) }))}</small></span>
             <span class="btn-row"><button class="btn btn-signal btn-sm" type="button" data-act="dprop" data-ok="1" data-trip="${tr.id}" data-id="${b.id}">${esc(t('vv.dAccept'))}</button><button class="btn btn-ghost btn-sm" type="button" data-act="dprop" data-ok="0" data-trip="${tr.id}" data-id="${b.id}">${esc(t('vv.dRefuse'))}</button></span></li>`).join('')}</ul>` : ''}
           <h3 class="app-h">${esc(t('vv.dBookings'))}</h3>
@@ -2966,7 +3013,7 @@
   function admTrips() {
     const trips = store.tripsState();
     const upcoming = trips.filter(tr => tr.status === 'scheduled');
-    const fills = trips.map(tr => store.tripLoad(tr).units / tr.capacity);
+    const fills = trips.map(tr => { const l = store.tripLoad(tr); return l.kg / l.maxKg; });
     const arrivals = store.state.events.filter(e => e.type === 'trip_arrived');
     return `<div class="adm-tiles">
         ${tile(t('vt.trips'), fmt(upcoming.length))}
@@ -2978,7 +3025,7 @@
         <thead><tr><th>${esc(t('vt.col.depart'))}</th><th>${esc(t('vt.col.arrive'))}</th><th>${esc(t('ad.col.driver'))}</th><th>${esc(t('a.colVehicle'))}</th><th>${esc(t('vt.col.cap'))}</th><th>${esc(t('vt.col.price'))}</th><th>${esc(t('vt.col.amount'))}</th><th>${esc(t('a.colStatus'))}</th></tr></thead>
         <tbody>${trips.slice().sort((a, b) => a.depart - b.depart).map(tr => { const l = store.tripLoad(tr); const amt = tr.bookings.filter(b => b.status !== 'cancelled' && !b.other).reduce((a, b) => a + b.total, 0);
           return `<tr><td>${dayLabel(tr.depart)} ${hm(tr.depart)}</td><td>${hm(store.arrivalTime(tr))}</td><td>${esc(tr.driverName)}</td><td>${esc(t('veh.' + tr.vehicle))}</td>
-            <td class="mono">${l.units} / ${tr.capacity} (${pctStr(l.units / tr.capacity)})</td><td class="mono">${fmt(tr.pricePerUnit)}</td><td class="mono">${fmt(amt)}</td>
+            <td class="mono">${fmt(l.kg)} / ${fmt(l.maxKg)} kg (${pctStr(l.kg / l.maxKg)})${tr.capacity * store.UNIT_KG.sac > store.payloadOf(tr.vehicle) ? ` <span class="pill pill-cancelled" title="${esc(t('cap.tripIncoherent', { c: tr.capacity, kg: fmt(tr.capacity * store.UNIT_KG.sac), max: fmt(store.payloadOf(tr.vehicle)) }))}">${esc(t('cap.tripBad'))}</span>` : ''}</td><td class="mono">${fmt(tr.pricePerUnit)}</td><td class="mono">${fmt(amt)}</td>
             <td><span class="pill pill-${tr.status === 'scheduled' ? 'open' : 'delivered'}">${esc(t('vv.tl.' + (tr.status === 'scheduled' ? 'booked' : tr.status)))}</span></td></tr>`; }).join('')}</tbody>
       </table></div>` : `<p class="empty">${esc(t('ad.none'))}</p>`}
       ${agentForm()}
@@ -3095,6 +3142,35 @@
       'nv.startNote': 'Prenez des photos du chargement : elles sont obligatoires pour démarrer, avec un scan du visage.', 'nv.needPhotos': 'Prenez d’abord au moins une photo du chargement.',
       'd.proofHint2': 'Photos = preuve en cas de litige.', 'd.next.loading': 'Démarrer la course', 'd.next.transit': 'Je suis arrivé',
       'vv.reprop': 'Proposer un autre prix', 'da.selfie': 'Scan du visage en direct',
+      'cap.weight': 'Trop lourd : environ {kg} kg pour {max} kg de charge utile.', 'cap.volume': 'Trop volumineux : environ {vol} m³ pour {max} m³ utiles.',
+      'cap.size': '{item} trop grand pour la caisse : {len} m pour {max} m disponibles.', 'cap.passengers': '{n} personne(s) à bord : {max} au maximum pour ce véhicule.',
+      'cap.distance': 'Trajet trop long pour ce véhicule : {km} km pour {max} km au maximum.', 'cap.vehicle': 'Véhicule inconnu.', 'cap.date': 'Date prévue invalide : entre 15 minutes et 30 jours à l’avance.',
+      'cap.volume2': 'Volume estimé : {v} m³ sur {m} m³ utiles.', 'cap.split': 'Aucun véhicule ne peut tout prendre en une fois : répartissez le chargement en plusieurs courses.',
+      'cap.blocked': 'Le chargement dépasse la capacité du véhicule. Changez de véhicule ou réduisez le chargement.',
+      'cap.driverNo': 'Vous ne pouvez pas accepter cette course avec votre véhicule.',
+      'cap.tripVehicle': 'Les trajets vivriers se font en camionnette 1T ou en camion.', 'cap.tripDate': 'Départ à programmer dans les {days} prochains jours.',
+      'cap.tripCap': 'Capacité trop élevée : {max} sacs de 50 kg au maximum ({kg} kg de charge utile).', 'cap.tripPrice': 'Indiquez un prix par unité.',
+      'cap.tripBad': 'Capacité incohérente', 'cap.tripIncoherent': '{c} sacs de 50 kg = {kg} kg pour {max} kg de charge utile : les réservations sont limitées à la charge utile.',
+      'cap.suspended': 'Compte suspendu.', 'cap.pending': 'Dossier en cours de vérification.', 'cap.docs': 'Documents à mettre à jour.', 'cap.nodriver': 'Connectez-vous.',
+      'blk.suspended': 'Compte suspendu : contactez Takaata.', 'blk.pending': 'Votre dossier est en cours de vérification.', 'blk.docs': 'Un document est manquant, refusé ou expiré : mettez-le à jour dans Moi › Mes documents.',
+      'blk.offline': 'Passez en ligne pour accepter des courses.', 'blk.vehicle': 'Cette course demande un autre véhicule.', 'blk.busy': 'Terminez votre course en cours avant d’en accepter une autre.',
+      'blk.nodriver': 'Connectez-vous.', 'blk.course': 'Compte bloqué : les actions de cette course sont suspendues. Le support Takaata vous contacte.',
+      'dt.planHint': 'Entre 15 minutes et 30 jours à l’avance.', 'dt.planned': 'Prévue {d} à {h}',
+      'sp.title': 'Compte suspendu', 'sp.text': 'Vous ne pouvez plus vous mettre en ligne, accepter ni effectuer de course. Contactez l’aide chauffeur pour connaître le motif.',
+      'dc2.blocked': 'Documents à mettre à jour : {d}.', 'dc2.fix': 'Mettre à jour', 'dc2.driverNote': 'Un document refusé ou expiré vous empêche de vous mettre en ligne. Envoyez une nouvelle photo : l’équipe la vérifie.',
+      'dc2.approveNeed': 'Validation possible seulement quand chaque document est vérifié.', 'dc2.badReason': 'Document illisible ou non conforme', 'dc2.noDate': 'date non renseignée',
+      'dc2.demo': 'vérifié automatiquement (démo)', 'dc2.verify': 'Vérifié', 'dc2.refuse': 'Refuser', 'dc2.newDate': 'Nouvelle date d’expiration', 'dc2.upload': 'Envoyer une photo',
+      'dc2.dateFirst': 'Indiquez d’abord la nouvelle date d’expiration (dans le futur).', 'dc2.sent': 'Document envoyé : en attente de vérification',
+      'doc.missing': 'Manquant', 'doc.provided': 'Fourni · à vérifier', 'doc.verified': 'Vérifié', 'doc.refused': 'Refusé', 'doc.expired': 'Expiré',
+      'da.inspection': 'Visite technique (certificat)', 'vv.leftKind': 'Reste {u} {k} · {s} place(s) cabine', 'vv.dCap2': 'Capacité (sacs de 50 kg, {m} max)',
+      'rp.f.open': 'À traiter', 'rp.f.sos': 'Urgences', 'rp.f.dispute': 'Litiges', 'rp.f.message': 'Messages', 'rp.f.resolved': 'Résolus',
+      'rp.st.open': 'Ouvert', 'rp.st.progress': 'En cours', 'rp.st.resolved': 'Résolu', 'rp.t.sos': 'Urgence', 'rp.t.dispute': 'Litige', 'rp.t.message': 'Message',
+      'rp.o.validate': 'Livraison validée', 'rp.o.cancel': 'Course annulée', 'rp.o.refund': 'Remboursement du client', 'rp.o.closed': 'Classé sans suite',
+      'rp.in': 'traité en {d}', 'rp.waiting': 'En attente depuis {d}', 'rp.taken': 'pris en charge le {d}', 'rp.take': 'Prendre en charge',
+      'rp.decision': 'Décision', 'rp.note': 'Note pour le client', 'rp.notePh': 'Ex. remboursement de 2 000 FCFA par Orange Money', 'rp.resolve': 'Clôturer', 'rp.done': 'Dossier clôturé',
+      'ad.todoSos': '{n} urgence(s) à traiter', 'ad.todoMsgs': '{n} message(s) client', 'ad.todoLate': '{n} demande(s) sans chauffeur depuis plus de 10 min', 'ad.todoDocs': '{n} chauffeur(s) avec document à revoir',
+      'ad.kToday': 'Aujourd’hui', 'ad.kDone': 'Livrées aujourd’hui', 'ad.kCancel': 'Taux d’annulation', 'ad.kAssign': 'Délai moyen d’attribution', 'ad.kTrip': 'Durée moyenne de course',
+      'ad.kOpenR': 'Signalements ouverts', 'ad.kSos': 'dont {n} urgence(s)', 'ad.kTotal': 'Depuis le lancement',
       'tr.share': 'Partager le suivi avec le destinataire', 'tr.tag': 'Suivi de livraison', 'tr.title': 'Votre livraison arrive', 'tr.done': 'Livraison terminée',
       'tr.msg': 'Takaata · Une livraison arrive pour vous : {r}. Chauffeur {d} ({pl}). Suivez-la en direct : {u} . Code de livraison à donner au chauffeur seulement si tout est en ordre : {c}',
       'tr.eta': 'Arrivée estimée vers {h}', 'tr.codeNote': 'Vérifiez la marchandise à l’arrivée, puis donnez au chauffeur le code de livraison reçu par message.',
@@ -3172,6 +3248,35 @@
       'nv.startNote': 'Take photos of the load: they are required to start, with a face scan.', 'nv.needPhotos': 'First take at least one photo of the load.',
       'd.proofHint2': 'Photos = proof in case of dispute.', 'd.next.loading': 'Start the trip', 'd.next.transit': 'I have arrived',
       'vv.reprop': 'Offer another price', 'da.selfie': 'Live face scan',
+      'cap.weight': 'Too heavy: about {kg} kg for a {max} kg payload.', 'cap.volume': 'Too bulky: about {vol} m³ for {max} m³ usable.',
+      'cap.size': '{item} too big for the cargo area: {len} m for {max} m available.', 'cap.passengers': '{n} person(s) on board: {max} at most for this vehicle.',
+      'cap.distance': 'Trip too long for this vehicle: {km} km for {max} km at most.', 'cap.vehicle': 'Unknown vehicle.', 'cap.date': 'Invalid planned date: between 15 minutes and 30 days ahead.',
+      'cap.volume2': 'Estimated volume: {v} m³ of {m} m³ usable.', 'cap.split': 'No vehicle can take everything at once: split the load into several trips.',
+      'cap.blocked': 'The load exceeds the vehicle capacity. Change vehicle or reduce the load.',
+      'cap.driverNo': 'You cannot accept this trip with your vehicle.',
+      'cap.tripVehicle': 'Food produce trips use a 1T van or a truck.', 'cap.tripDate': 'Departure must be within the next {days} days.',
+      'cap.tripCap': 'Capacity too high: {max} bags of 50 kg at most ({kg} kg payload).', 'cap.tripPrice': 'Enter a price per unit.',
+      'cap.tripBad': 'Inconsistent capacity', 'cap.tripIncoherent': '{c} bags of 50 kg = {kg} kg for a {max} kg payload: bookings are limited to the payload.',
+      'cap.suspended': 'Account suspended.', 'cap.pending': 'Application under review.', 'cap.docs': 'Documents to update.', 'cap.nodriver': 'Please sign in.',
+      'blk.suspended': 'Account suspended: contact Takaata.', 'blk.pending': 'Your application is under review.', 'blk.docs': 'A document is missing, refused or expired: update it in Me › My documents.',
+      'blk.offline': 'Go online to accept trips.', 'blk.vehicle': 'This trip needs another vehicle.', 'blk.busy': 'Finish your current trip before accepting another one.',
+      'blk.nodriver': 'Please sign in.', 'blk.course': 'Account blocked: actions on this trip are suspended. Takaata support will contact you.',
+      'dt.planHint': 'Between 15 minutes and 30 days ahead.', 'dt.planned': 'Planned {d} at {h}',
+      'sp.title': 'Account suspended', 'sp.text': 'You can no longer go online, accept or carry out trips. Contact driver help to learn why.',
+      'dc2.blocked': 'Documents to update: {d}.', 'dc2.fix': 'Update', 'dc2.driverNote': 'A refused or expired document prevents you from going online. Send a new photo: the team checks it.',
+      'dc2.approveNeed': 'Approval is only possible once every document is verified.', 'dc2.badReason': 'Unreadable or non-compliant document', 'dc2.noDate': 'no date given',
+      'dc2.demo': 'verified automatically (demo)', 'dc2.verify': 'Verified', 'dc2.refuse': 'Refuse', 'dc2.newDate': 'New expiry date', 'dc2.upload': 'Send a photo',
+      'dc2.dateFirst': 'First enter the new expiry date (in the future).', 'dc2.sent': 'Document sent: awaiting verification',
+      'doc.missing': 'Missing', 'doc.provided': 'Provided · to check', 'doc.verified': 'Verified', 'doc.refused': 'Refused', 'doc.expired': 'Expired',
+      'da.inspection': 'Roadworthiness test (certificate)', 'vv.leftKind': '{u} {k} left · {s} cabin seat(s)', 'vv.dCap2': 'Capacity (50 kg bags, {m} max)',
+      'rp.f.open': 'To handle', 'rp.f.sos': 'Emergencies', 'rp.f.dispute': 'Disputes', 'rp.f.message': 'Messages', 'rp.f.resolved': 'Resolved',
+      'rp.st.open': 'Open', 'rp.st.progress': 'In progress', 'rp.st.resolved': 'Resolved', 'rp.t.sos': 'Emergency', 'rp.t.dispute': 'Dispute', 'rp.t.message': 'Message',
+      'rp.o.validate': 'Delivery validated', 'rp.o.cancel': 'Trip cancelled', 'rp.o.refund': 'Customer refunded', 'rp.o.closed': 'Closed, no action',
+      'rp.in': 'handled in {d}', 'rp.waiting': 'Waiting for {d}', 'rp.taken': 'taken on {d}', 'rp.take': 'Take it',
+      'rp.decision': 'Decision', 'rp.note': 'Note for the customer', 'rp.notePh': 'E.g. 2,000 FCFA refunded by Orange Money', 'rp.resolve': 'Close', 'rp.done': 'Case closed',
+      'ad.todoSos': '{n} emergency(ies) to handle', 'ad.todoMsgs': '{n} customer message(s)', 'ad.todoLate': '{n} request(s) without a driver for over 10 min', 'ad.todoDocs': '{n} driver(s) with a document to review',
+      'ad.kToday': 'Today', 'ad.kDone': 'Delivered today', 'ad.kCancel': 'Cancellation rate', 'ad.kAssign': 'Average time to assign', 'ad.kTrip': 'Average trip duration',
+      'ad.kOpenR': 'Open reports', 'ad.kSos': 'incl. {n} emergency(ies)', 'ad.kTotal': 'Since launch',
       'tr.share': 'Share tracking with the recipient', 'tr.tag': 'Delivery tracking', 'tr.title': 'Your delivery is on its way', 'tr.done': 'Delivery completed',
       'tr.msg': 'Takaata · A delivery is coming for you: {r}. Driver {d} ({pl}). Track it live: {u} . Delivery code to give the driver only if everything is fine: {c}',
       'tr.eta': 'Estimated arrival around {h}', 'tr.codeNote': 'Check the goods on arrival, then give the driver the delivery code you received by message.',
@@ -3223,6 +3328,48 @@
       'd.cashHint': 'Cash payment: collect {p} from the customer. Your net earnings: {n}.'
     }
   });
+
+  // Messages des contrôles « serveur » (capacité, trajets, droits du chauffeur).
+  function capMsg(e) {
+    const n = x => String(x).replace('.', ',');
+    return t('cap.' + e.code, { kg: fmt(e.kg || 0), max: e.max != null ? (e.code === 'volume' || e.code === 'size' ? n(e.max) : fmt(e.max)) : '', vol: n(e.vol || 0), item: e.item ? t('it.' + e.item) : '', len: n(e.len || 0), n: e.n, km: n(e.km || 0), days: e.days });
+  }
+  function offerError(res) {
+    if (res.ok) return '';
+    if (res.missing) return t('d.need', { m: fcfa(res.missing) });
+    if (res.reason === 'capacity') return res.errors.map(capMsg).join(' ');
+    return res.reason ? t('blk.' + res.reason) : '';
+  }
+  const localInput = ts => { const x = new Date(ts), p = v => String(v).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}T${p(x.getHours())}:${p(x.getMinutes())}`; };
+  const docLabel = k => t(k === 'inspection' ? 'da.inspection' : 'da.' + k);
+  // Dates d'expiration : toujours avec l'année.
+  const dateY = ts => new Date(ts).toLocaleDateString(TK.getLang() === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  function showImage(src) {
+    const el = document.createElement('div');
+    el.className = 'media-ov lightbox';
+    el.innerHTML = `<img src="${src}" alt=""><button type="button" class="ov-x" aria-label="${esc(t('md.close'))}">✕</button>`;
+    el.addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+  }
+  // Documents du chauffeur : manquant, fourni (à vérifier), vérifié, refusé, expiré.
+  const DOC_PILL = { missing: 'cancelled', provided: 'open', verified: 'delivered', refused: 'cancelled', expired: 'cancelled' };
+  function docsList(d, mode) {
+    return `<ul class="doc-list">${store.REQUIRED_DOCS.map(k => {
+      const st = store.docState(d, k), ek = store.DOC_EXPIRY[k], exp = ek && d[ek];
+      const img = k === 'selfie' ? d.faceRef : (d.docImgs || {})[k], rv = (d.docReview || {})[k];
+      return `<li class="doc-row">
+        ${img ? `<button type="button" class="doc-thumb" data-act="doc-view" data-phone="${d.phone}" data-k="${k}" aria-label="${esc(docLabel(k))}"><img src="${img}" alt=""></button>` : `<span class="doc-thumb is-empty" aria-hidden="true">${d.docs && d.docs[k] ? '✓' : '—'}</span>`}
+        <span class="doc-main"><b>${esc(docLabel(k))}</b><small>${exp ? esc(t('dm.until', { d: dateY(new Date(exp).getTime()) })) : ek ? esc(t('dc2.noDate')) : ''}${rv && rv.reason ? ' · ' + esc(rv.reason) : ''}${rv && rv.demo ? ' · ' + esc(t('dc2.demo')) : ''}</small></span>
+        <span class="pill pill-${DOC_PILL[st]}">${esc(t('doc.' + st))}</span>
+        ${mode === 'admin' && d.docs && d.docs[k] && st !== 'expired' ? `<span class="doc-acts">
+          ${st !== 'verified' ? `<button class="btn btn-signal btn-sm" type="button" data-act="doc-ok" data-phone="${d.phone}" data-k="${k}">${esc(t('dc2.verify'))}</button>` : ''}
+          ${st !== 'refused' ? `<button class="btn btn-ghost btn-sm" type="button" data-act="doc-ko" data-phone="${d.phone}" data-k="${k}">${esc(t('dc2.refuse'))}</button>` : ''}</span>` : ''}
+        ${mode === 'driver' && ['missing', 'refused', 'expired'].includes(st) && k !== 'selfie' ? `<span class="doc-acts">
+          ${ek ? `<input type="date" id="dexp-${k}" aria-label="${esc(t('dc2.newDate'))}" min="${new Date(Date.now() + 864e5).toISOString().slice(0, 10)}">` : ''}
+          <label class="btn btn-light btn-sm"><input type="file" accept="image/*" capture="environment" data-dupload="${k}" hidden>${esc(t('dc2.upload'))}</label></span>` : ''}
+      </li>`;
+    }).join('')}</ul>`;
+  }
 
   // ---------- SUIVI PARTAGÉ, VOIX, PETITE CONNEXION, RÉCURRENCE, NOTE DU CLIENT, ENTREPRISES, PARRAINAGE ----------
 
@@ -3539,11 +3686,16 @@
       case 'adm-driver': Object.assign(view.adm, { driver: b.dataset.phone, order: null, client: null }); render(); break;
       case 'adm-client': Object.assign(view.adm, { client: b.dataset.phone, order: null, driver: null }); render(); break;
       case 'adm-close': Object.assign(view.adm, { order: null, driver: null, client: null }); render(); break;
-      case 'adm-approve': store.reviewDriver(b.dataset.phone, true); break;
+      case 'adm-approve': { const res = store.reviewDriver(b.dataset.phone, true); if (res && !res.ok && res.missing) ui.toast(t('dc2.approveNeed') + ' ' + res.missing.map(docLabel).join(', ')); break; }
+      case 'doc-ok': store.reviewDoc(b.dataset.phone, b.dataset.k, true); break;
+      case 'doc-ko': store.reviewDoc(b.dataset.phone, b.dataset.k, false, t('dc2.badReason')); break;
+      case 'doc-view': { const d = store.driverAccount(b.dataset.phone) || store.driver(); const src = d && (b.dataset.k === 'selfie' ? d.faceRef : (d.docImgs || {})[b.dataset.k]); if (src) showImage(src); break; }
+      case 'dme-doc': view.dtab = 'me'; view.dmeSub = 'docs'; dgo(); break;
       case 'adm-reject': store.reviewDriver(b.dataset.phone, false, t(document.getElementById('adm-reason').value)); break;
       case 'adm-suspend': { const d = store.driverAccount(b.dataset.phone); store.suspendDriver(d.phone, !d.suspended); break; }
       case 'adm-cancel': store.adminCancel(id); break;
-      case 'adm-resolve': store.resolveReport(+b.dataset.at); break;
+      case 'rp-filter': view.adm.rpf = b.dataset.f; render(); break;
+      case 'rp-take': store.takeReport(id); break;
       case 'adm-defaults': store.resetPricing(); ui.toast(t('ad.saved')); break;
       case 'call': view.call = { orderId: id, side: b.dataset.side }; render(); break;
       case 'hangup': view.call = null; render(); break;
@@ -3552,7 +3704,11 @@
       case 'd-online': {
         // Se mettre en ligne demande un scan du visage ; se déconnecter, non.
         if (store.driver().online) store.setOnline(false);
-        else faceGate('online').then(ok => { if (ok) { store.setOnline(true); ui.toast(t('fs.okOnline')); } });
+        else {
+          const why = store.blockReason(store.driver());
+          if (why) { ui.toast(t('blk.' + why)); break; }
+          faceGate('online').then(ok => { if (!ok) return; const res = store.setOnline(true); ui.toast(res.ok ? t('fs.okOnline') : t('blk.' + res.reason)); });
+        }
         break;
       }
       case 'df-face': {
@@ -3737,7 +3893,7 @@
         if (store.available() < commission(o.price, o.optionsPrice)) break;
         // Accepter reste rapide : le scan du visage se fait au départ vers le chargement.
         const res = store.driverOffer(id, o.price);
-        view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
+        view.offerMsg[id] = offerError(res);
         if (res.ok) { view.reqFull = null; ui.toast(t('nt.sent')); }
         render();
         break;
@@ -3750,6 +3906,7 @@
         // après les photos du chargement. C'est bien le même chauffeur du début à la fin.
         const FACE_STEP = { assigned: 'leave', loading: 'start' };
         if (o.status === 'loading' && !o.photos.start) { ui.toast(t('nv.needPhotos')); break; }
+        if (!store.activeDrv()) { ui.toast(t('blk.' + (store.blockReason(store.driver()) || 'suspended'))); break; }
         if (FACE_STEP[o.status]) {
           faceGate(FACE_STEP[o.status], id).then(ok => { if (ok) store.advance(id); });
           break;
@@ -3784,7 +3941,13 @@
       f.licenseCats = el.checked ? f.licenseCats.concat(c) : f.licenseCats.filter(x => x !== c);
       return true;
     }
-    if (el.dataset.ddoc) { f.docs[el.dataset.ddoc] = el.files ? el.files.length : 0; return true; }
+    if (el.dataset.ddoc) {
+      const key = el.dataset.ddoc, file = el.files && el.files[0];
+      f.docs[key] = el.files ? el.files.length : 0;
+      // Une miniature du document est gardée pour la vérification par l'équipe.
+      if (file) TK.media.fileToJpeg(file, 640, 0.6).then(img => { f.docImgs = Object.assign({}, f.docImgs, { [key]: img }); });
+      return true;
+    }
     if (!el.dataset.dbind) return false;
     f[el.dataset.dbind] = el.type === 'checkbox' ? el.checked : el.value;
     return true;
@@ -3822,6 +3985,13 @@
     if (el.id === 'adm-reason') { view.adm.reason = el.value; return; }
     if (el.id === 'me-photo-in') { if (el.files && el.files[0]) readPhoto(el.files[0]); return; }
     if (el.id === 'set-notif') { store.updateUser({ notif: el.checked }); return; }
+    if (el.dataset.dupload) {
+      const k = el.dataset.dupload, file = el.files && el.files[0], ek = store.DOC_EXPIRY[k];
+      const exp = ek ? (document.getElementById('dexp-' + k) || {}).value : null;
+      if (ek && !exp) { ui.toast(t('dc2.dateFirst')); el.value = ''; return; }
+      if (file) TK.media.fileToJpeg(file, 640, 0.6).then(img => { const res = store.updateDoc(k, img, exp); ui.toast(res.ok ? t('dc2.sent') : t('dc2.dateFirst')); });
+      return;
+    }
     if (el.id === 'pf-voice') { store.setSetting('voice', el.checked); if (el.checked) speak(t('vo.test'), true); return; }
     if (el.id === 'pf-big') { store.setSetting('bigText', el.checked); return; }
     if (el.id === 'pf-data') { store.setSetting('dataSaver', el.checked); return; }
@@ -3902,7 +4072,8 @@
       if (!depart || depart < Date.now()) { err.textContent = t('vv.dBadTime'); err.hidden = false; return; }
       if (!(capacity > 0) || !(price > 0)) { err.textContent = t('vv.dBadCap'); err.hidden = false; return; }
       const stops = Array.from(f.querySelectorAll('input[data-tstop]:checked')).map(x => x.dataset.tstop).sort((a, b) => store.stopOf(a).km - store.stopOf(b).km);
-      store.publishTrip({ depart, stops, capacity, seats: +document.getElementById('tf-seats').value, pricePerUnit: price, pricePerSeat: +document.getElementById('tf-seatPrice').value || 0 });
+      const res = store.publishTrip({ depart, stops, capacity, seats: +document.getElementById('tf-seats').value, pricePerUnit: price, pricePerSeat: +document.getElementById('tf-seatPrice').value || 0 });
+      if (!res.ok) { err.textContent = res.errors.map(capMsg).join(' '); err.hidden = false; return; }
       view.dtripForm = null;
       ui.toast(t('vv.dPublished'));
       render();
@@ -3979,7 +4150,12 @@
       if (view.draft.service === 'handling' && view.draft.helpers < 1) view.draft.helpers = 1;
       go('wizard', { step: 3 });
     } else if (f.id === 'wizForm') {
-      if (view.step < 4) { go('wizard', { step: view.step + 1 }); return; }
+      if (view.step < 4) {
+        // Chargement trop grand pour le véhicule : on ne passe pas à l'étape du prix.
+        const d0 = view.draft, km0 = distanceKm(d0.from, d0.to);
+        if (!TK.checkLoad(Object.assign({}, d0, { km: km0 }), d0.vehicle, km0).ok) { ui.toast(t('cap.blocked')); const el = root.querySelector('.cap-errors'); if (el) el.scrollIntoView({ block: 'center' }); return; }
+        go('wizard', { step: view.step + 1 }); return;
+      }
       const q = draftQuote(view.draft);
       if (!view.draft.price || view.draft.price < q.minimum) {
         document.getElementById('w-price-err').hidden = false;
@@ -4001,7 +4177,9 @@
         go('orders', { draft: null, moreItems: false });
         return;
       }
-      const o = store.createOrder(d);
+      const res = store.createOrder(d);
+      if (!res.ok) { ui.toast(res.errors.map(capMsg).join(' ')); return; }
+      const o = res.order;
       ui.toast(t('toast.published'));
       go('order', { orderId: o.id, draft: null, moreItems: false });
     } else if (f.id === 'reportForm') {
@@ -4024,9 +4202,13 @@
       const price = priceForNet(o, wanted);
       // Contre-offre : pas de scan du visage (réservé à l'acceptation de la course).
       const res = store.driverOffer(id, price);
-      view.offerMsg[id] = res.ok ? '' : res.missing ? t('d.need', { m: fcfa(res.missing) }) : '';
+      view.offerMsg[id] = offerError(res);
       if (res.ok) { view.counterFor = null; view.reqFull = null; ui.toast(t('nt.sent')); }
       render();
+    } else if (f.classList.contains('rp-form')) {
+      const id = f.dataset.id;
+      store.resolveReport(id, document.getElementById('rp-out-' + id).value, document.getElementById('rp-note-' + id).value.trim());
+      ui.toast(t('rp.done'));
     } else if (f.id === 'bizAccForm') {
       const name = document.getElementById('bz-name').value.trim();
       if (!name) { document.getElementById('bz-err').hidden = false; return; }
@@ -4047,6 +4229,7 @@
       if (val.length !== 4) { view.codeErr = t('dc.four'); render(); return; }
       const res = store.submitDeliveryCode(id, val);
       if (res.photos) { view.codeErr = t('dc.needPhotos', { n: store.END_PHOTOS_MIN }); render(); return; }
+      if (res.blocked) { view.codeErr = t('blk.' + (store.blockReason(store.driver()) || 'suspended')); render(); return; }
       if (res.ok) { view.codeErr = ''; view.rateClientFor = id; view.crStars = 5; view.crTags = []; ui.toast(t('dc.ok')); render(); return; }
       view.codeErr = res.locked ? '' : t('dc.bad', { n: res.left });
       render();
